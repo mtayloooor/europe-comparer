@@ -174,17 +174,21 @@
         </div>
         <div class="p-4 space-y-3" v-if="activeVariant">
 
-          <!-- Endpoints & flights (per-variant) -->
+          <!-- Endpoints & flights (per-variant, collapsible) -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-slate-700 flex items-center gap-2">
-                <app-icon name="lucide:plane" :size="18" class="text-sky-600"></app-icon> Endpoints &amp; Flights</h3>
-              <select v-model="copySource" @change="copyEndpointsFrom(copySource)"
+            <div class="flex items-center justify-between gap-2">
+              <button @click="showEndpoints = !showEndpoints" class="flex items-center gap-2 text-left">
+                <app-icon name="lucide:plane" :size="18" class="text-sky-600"></app-icon>
+                <span class="font-semibold text-slate-700">Endpoints &amp; Flights</span>
+                <app-icon :name="showEndpoints ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
+              </button>
+              <select v-show="showEndpoints" v-model="copySource" @change="copyEndpointsFrom(copySource)"
                       class="text-[11px] border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[150px]">
                 <option value="" disabled>Copy from…</option>
                 <option v-for="v in otherVariants" :key="v.id" :value="v.id">{{ v.name }}</option>
               </select>
             </div>
+            <div v-show="showEndpoints" class="space-y-3">
             <p class="text-[11px] text-slate-400 -mt-1">
               The cities you fly into and out of. Travel between an endpoint and the nearest destination is a leg below.
             </p>
@@ -233,6 +237,7 @@
               <angle-dial :model-value="activeVariant.trailAngleOut"
                           @update:model-value="activeVariant.trailAngleOut = $event" label="Departure"></angle-dial>
               <span class="text-[10px] text-slate-400 flex-1">Aim the fading trails into/out of the endpoints. Double-click a dial for auto.</span>
+            </div>
             </div>
           </section>
 

@@ -59,9 +59,10 @@
         return d;
       }
 
-      // Collapsible global-setup sections.
+      // Collapsible sections.
       const showDestinations = ref(true);
       const showDayTrips = ref(true);
+      const showEndpoints = ref(true);
 
       // ── In-page debug log ──────────────────────────────────────────
       const debugEntries = reactive([]);
@@ -694,6 +695,7 @@
         copySource,
         showDestinations,
         showDayTrips,
+        showEndpoints,
         activeVariant,
         otherVariants,
         activeLegs,
