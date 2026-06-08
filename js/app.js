@@ -17,6 +17,12 @@
         state.activeVariantId = state.variants[0] ? state.variants[0].id : null;
       }
 
+      // Rail detail is opt-in per session: never auto-fetch on load. The user
+      // re-enables specific train legs via the train icon.
+      state.variants.forEach((v) => {
+        v.railEnabled = {};
+      });
+
       const editingVariantId = ref(null);
       const syncPrompt = ref(null); // { mk, label, others, newData }
       const copySource = ref(''); // selected "copy endpoints from" variant id
@@ -461,16 +467,51 @@
       }
 
       let renderSeq = 0;
+      const lastGeom = {}; // legKey+method+rail -> { coords, dashed } (best geometry seen)
+
+      function legView(seg, coords, approximate) {
+        const distKm = coords.length >= 2 ? pathKm(coords) : 0;
+        const tooltip =
+          `<b>${escapeHtml(seg.fromName)} → ${escapeHtml(seg.toName)}</b><br>` +
+          `${TRAVEL[seg.method].label} · $${Math.round(seg.cost).toLocaleString()} · ` +
+          `${fmtH(seg.duration)} · ${distKm < 1 ? '—' : Math.round(distKm) + ' km'}`;
+        return {
+          key: seg.legKey,
+          coords,
+          color: colorOf(seg.method),
+          dashed: approximate || seg.method === 'flight' || seg.method === 'ferry',
+          tooltip,
+        };
+      }
+      const straightCoords = (seg) =>
+        seg.from.lat != null && seg.to.lat != null
+          ? [[seg.from.lat, seg.from.lng], [seg.to.lat, seg.to.lng]]
+          : [];
+
       async function renderMap() {
         if (!mapCtl || !activeVariant.value) return;
         const token = (renderSeq += 1);
-        const { markers, segments, dayTrips } = buildMapPayload();
+        const { markers, segments, dayTrips, trails } = buildMapPayload();
         window.DebugLog.info(
           `Render "${activeVariant.value.name}": ${segments.length} legs [${segments.map((s) => s.method).join(', ')}]`
         );
+        const onLegHover = (key) => { hoveredLegKey.value = key; };
+        const draw = (legs) => mapCtl.render({ markers, legs, dayTrips, trails, onLegHover });
 
-        const legs = await Promise.all(
-          segments.map(async (seg) => {
+        // Phase 1 — draw immediately using the best geometry we already have
+        // (cached route if available, otherwise a quick straight line).
+        const legs = segments.map((seg) => {
+          const gk = `${seg.legKey}:${seg.method}:${seg.rail ? 1 : 0}`;
+          const cached = lastGeom[gk];
+          return cached
+            ? legView(seg, cached.coords, cached.dashed)
+            : legView(seg, straightCoords(seg), true);
+        });
+        draw(legs);
+
+        // Phase 2 — resolve real geometry per leg and upgrade it in place.
+        await Promise.all(
+          segments.map(async (seg, idx) => {
             const fetching = seg.method === 'train' && seg.rail;
             if (fetching) railLoading[seg.legKey] = true;
             let res;
@@ -479,28 +520,17 @@
             } finally {
               if (fetching) delete railLoading[seg.legKey];
             }
+            if (token !== renderSeq) return; // superseded by a newer render
             if (seg.method === 'train' && seg.rail) {
-              // Record the resolved station for each endpoint (for the leg planner).
               stationByPlace[seg.from.id] = res.fromStation || null;
               stationByPlace[seg.to.id] = res.toStation || null;
             }
-            const distKm = res.coords.length >= 2 ? pathKm(res.coords) : 0;
-            const tooltip =
-              `<b>${escapeHtml(seg.fromName)} → ${escapeHtml(seg.toName)}</b><br>` +
-              `${TRAVEL[seg.method].label} · $${Math.round(seg.cost).toLocaleString()} · ` +
-              `${fmtH(seg.duration)} · ${distKm < 1 ? '—' : Math.round(distKm) + ' km'}`;
-            return {
-              key: seg.legKey,
-              coords: res.coords,
-              color: colorOf(seg.method),
-              dashed: res.approximate || seg.method === 'flight' || seg.method === 'ferry',
-              tooltip,
-            };
+            const dashed = res.approximate || seg.method === 'flight' || seg.method === 'ferry';
+            lastGeom[`${seg.legKey}:${seg.method}:${seg.rail ? 1 : 0}`] = { coords: res.coords, dashed };
+            legs[idx] = legView(seg, res.coords, res.approximate);
+            draw(legs); // progressive: redraw as each leg upgrades
           })
         );
-
-        if (token !== renderSeq) return; // a newer render superseded this one
-        mapCtl.render({ markers, legs, dayTrips, trails, onLegHover: (key) => { hoveredLegKey.value = key; } });
       }
 
       function escapeHtml(s) {
