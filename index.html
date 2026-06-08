@@ -9,19 +9,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: { DEFAULT: '#4f46e5', dark: '#4338ca' },
-          },
-        },
-      },
+      theme: { extend: { colors: { brand: { DEFAULT: '#4f46e5', dark: '#4338ca' } } } },
     };
   </script>
 
-  <!-- Leaflet (map fallback for MapKit JS) -->
+  <!-- Leaflet (OpenStreetMap fallback) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Apple MapKit JS (renders once a token is supplied in-app) -->
+  <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"></script>
 
   <!-- Vue 3 global build (includes template compiler — no build step needed) -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -41,22 +38,28 @@
           </div>
         </div>
         <div class="flex items-center gap-2 text-sm">
+          <!-- Map provider toggle -->
+          <div class="flex rounded-md overflow-hidden border border-slate-300">
+            <button @click="setMapProvider('leaflet')"
+                    class="px-2.5 py-1.5 font-medium"
+                    :class="state.mapProvider==='leaflet' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">🗺️ OSM</button>
+            <button @click="setMapProvider('mapkit')"
+                    class="px-2.5 py-1.5 font-medium border-l border-slate-300"
+                    :class="state.mapProvider==='mapkit' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">🍎 Apple</button>
+          </div>
+          <button v-if="state.mapProvider==='mapkit'" @click="changeToken"
+                  class="px-2 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300" title="Set/replace MapKit token">🔑</button>
+
           <button @click="autofillAll"
-                  class="px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium">
-            ✨ Autofill Estimates
-          </button>
+                  class="px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium">✨ Autofill</button>
           <button @click="exportData"
-                  class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium">
-            ⬇ Export
-          </button>
+                  class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium">⬇ Export</button>
           <label class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium cursor-pointer">
             ⬆ Import
             <input type="file" accept="application/json" class="hidden" @change="importData" />
           </label>
           <button @click="resetAll"
-                  class="px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium">
-            Reset
-          </button>
+                  class="px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium">Reset</button>
         </div>
       </div>
     </header>
@@ -64,117 +67,140 @@
     <!-- ============================ SPLIT LAYOUT ============================ -->
     <div class="flex flex-col lg:flex-row h-[calc(100vh-61px)]">
 
-      <!-- ===================== LEFT SIDEBAR (config) ===================== -->
-      <aside class="w-full lg:w-[460px] lg:min-w-[460px] overflow-y-auto border-r border-slate-200 bg-slate-50 p-4 space-y-5">
+      <!-- ===================== LEFT SIDEBAR ===================== -->
+      <aside class="w-full lg:w-[480px] lg:min-w-[480px] overflow-y-auto border-r border-slate-200 bg-slate-50">
 
-        <!-- Trip endpoints + flights -->
-        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <h2 class="font-semibold text-slate-700 flex items-center gap-2">🛫 Trip Endpoints &amp; Flights</h2>
+        <!-- ░░░░░░░░░░ GLOBAL SETUP ░░░░░░░░░░ -->
+        <div class="bg-slate-200/60 border-b-2 border-slate-300 px-4 py-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">🛠️ Global Setup <span class="font-normal normal-case">· shared by all variants</span></h2>
+        </div>
+        <div class="p-4 space-y-3">
 
-          <div class="grid grid-cols-2 gap-2">
-            <label class="text-xs font-medium text-slate-500">Origin (Point A)
-              <input list="city-list" v-model="state.origin.name" @change="onPlaceName(state.origin)"
-                     class="city-input" placeholder="e.g. London" />
-            </label>
-            <label class="text-xs font-medium text-slate-500">Final Destination (Point B)
-              <input list="city-list" v-model="state.destination.name" @change="onPlaceName(state.destination)"
-                     class="city-input" placeholder="e.g. Lisbon" />
-            </label>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
-              <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight INTO trip</p>
-              <div class="flex gap-2">
-                <label class="text-[11px] text-slate-500 flex-1">Cost ($)
-                  <input type="number" min="0" v-model.number="state.flightIn.cost" class="num-input" />
-                </label>
-                <label class="text-[11px] text-slate-500 flex-1">Time (h)
-                  <input type="number" min="0" step="0.25" v-model.number="state.flightIn.duration" class="num-input" />
-                </label>
+          <!-- Key destinations (collapsible) -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200">
+            <button @click="showDestinations = !showDestinations"
+                    class="w-full flex items-center justify-between p-4 text-left">
+              <span class="font-semibold text-slate-700 flex items-center gap-2">📍 Key Destinations
+                <span class="text-xs font-normal text-slate-400">({{ state.destinations.length }})</span></span>
+              <span class="text-slate-400">{{ showDestinations ? '▾' : '▸' }}</span>
+            </button>
+            <div v-show="showDestinations" class="px-4 pb-4 space-y-2">
+              <p v-if="state.destinations.length < 4" class="text-xs text-amber-600">
+                Add at least 4 core destinations ({{ state.destinations.length }}/4).
+              </p>
+              <div v-for="dest in state.destinations" :key="dest.id"
+                   class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+                <span class="w-6 h-6 rounded-full text-white text-xs flex items-center justify-center shrink-0"
+                      :style="{ background: dest.color }">{{ destLabel(dest.id) }}</span>
+                <input list="city-list" v-model="dest.name" @change="onPlaceName(dest)"
+                       class="flex-1 city-input !mt-0" placeholder="Destination name" />
+                <button @click="removeDestination(dest.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
               </div>
+              <button @click="addDestination" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add destination</button>
             </div>
-            <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
-              <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight OUT of trip</p>
-              <div class="flex gap-2">
-                <label class="text-[11px] text-slate-500 flex-1">Cost ($)
-                  <input type="number" min="0" v-model.number="state.flightOut.cost" class="num-input" />
+          </section>
+
+          <!-- Day trips (collapsible) -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200">
+            <button @click="showDayTrips = !showDayTrips"
+                    class="w-full flex items-center justify-between p-4 text-left">
+              <span class="font-semibold text-slate-700 flex items-center gap-2">🌄 Day Trips
+                <span class="text-xs font-normal text-slate-400">({{ state.dayTrips.length }})</span></span>
+              <span class="text-slate-400">{{ showDayTrips ? '▾' : '▸' }}</span>
+            </button>
+            <div v-show="showDayTrips" class="px-4 pb-4 space-y-2">
+              <p v-if="!state.dayTrips.length" class="text-xs text-slate-400">No day trips yet. They loop out and back to a key destination on the same day.</p>
+              <div v-for="dt in state.dayTrips" :key="dt.id"
+                   class="bg-emerald-50 border border-emerald-100 rounded-lg p-2 space-y-2">
+                <div class="flex items-center gap-2">
+                  <input list="city-list" v-model="dt.name" @change="onPlaceName(dt)"
+                         class="flex-1 city-input !mt-0" placeholder="Day trip location" />
+                  <button @click="removeDayTrip(dt.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
+                </div>
+                <label class="text-[11px] text-slate-500 block">Linked to key destination
+                  <select v-model="dt.destinationId" class="num-input">
+                    <option v-for="d in state.destinations" :key="d.id" :value="d.id">{{ d.name || 'Unnamed' }}</option>
+                  </select>
                 </label>
-                <label class="text-[11px] text-slate-500 flex-1">Time (h)
-                  <input type="number" min="0" step="0.25" v-model.number="state.flightOut.duration" class="num-input" />
-                </label>
+                <div class="flex gap-2 items-end">
+                  <label class="text-[11px] text-slate-500 flex-1">Cost ($)
+                    <input type="number" min="0" v-model.number="dt.cost" class="num-input" />
+                  </label>
+                  <label class="text-[11px] text-slate-500 flex-1">Time (h)
+                    <input type="number" min="0" step="0.25" v-model.number="dt.duration" class="num-input" />
+                  </label>
+                  <label class="text-[11px] text-slate-500 flex items-center gap-1 pb-2">
+                    <input type="checkbox" v-model="dt.oneWay" /> one-way (×2)
+                  </label>
+                </div>
+                <p class="text-[11px] text-emerald-700">Round-trip total: ${{ dayTripCost(dt) }} · {{ fmtH(dayTripTime(dt)) }}</p>
               </div>
+              <button @click="addDayTrip" :disabled="!state.destinations.length"
+                      class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40">+ Add day trip</button>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <!-- Key destinations -->
-        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-slate-700 flex items-center gap-2">📍 Key Destinations</h2>
-            <button @click="addDestination" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add</button>
-          </div>
-          <p v-if="state.destinations.length < 4" class="text-xs text-amber-600">
-            Add at least 4 core destinations ({{ state.destinations.length }}/4).
-          </p>
+        <!-- ░░░░░░░░░░ VARIANT CONFIG ░░░░░░░░░░ -->
+        <div class="bg-indigo-100 border-y-2 border-indigo-200 px-4 py-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-brand-dark flex items-center gap-2">🧩 Variant —
+            <span class="normal-case">{{ activeVariant ? activeVariant.name : '—' }}</span></h2>
+        </div>
+        <div class="p-4 space-y-3" v-if="activeVariant">
 
-          <div v-for="dest in state.destinations" :key="dest.id"
-               class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
-            <span class="w-6 h-6 rounded-full text-white text-xs flex items-center justify-center shrink-0"
-                  :style="{ background: dest.color }">{{ destLabel(dest.id) }}</span>
-            <input list="city-list" v-model="dest.name" @change="onPlaceName(dest)"
-                   class="flex-1 city-input !mt-0" placeholder="Destination name" />
-            <button @click="removeDestination(dest.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
-          </div>
-        </section>
-
-        <!-- Day trips -->
-        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-slate-700 flex items-center gap-2">🌄 Day Trips</h2>
-            <button @click="addDayTrip" :disabled="!state.destinations.length"
-                    class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40">+ Add</button>
-          </div>
-          <p v-if="!state.dayTrips.length" class="text-xs text-slate-400">No day trips yet. They loop out and back to a key destination on the same day.</p>
-
-          <div v-for="dt in state.dayTrips" :key="dt.id"
-               class="bg-emerald-50 border border-emerald-100 rounded-lg p-2 space-y-2">
-            <div class="flex items-center gap-2">
-              <input list="city-list" v-model="dt.name" @change="onPlaceName(dt)"
-                     class="flex-1 city-input !mt-0" placeholder="Day trip location" />
-              <button @click="removeDayTrip(dt.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
-            </div>
-            <label class="text-[11px] text-slate-500 block">Linked to key destination
-              <select v-model="dt.destinationId" class="num-input">
-                <option v-for="d in state.destinations" :key="d.id" :value="d.id">{{ d.name || 'Unnamed' }}</option>
+          <!-- Endpoints & flights (per-variant) -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-slate-700 flex items-center gap-2">🛫 Endpoints &amp; Flights</h3>
+              <select v-model="copySource" @change="copyEndpointsFrom(copySource)"
+                      class="text-[11px] border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[150px]">
+                <option value="" disabled>Copy from…</option>
+                <option v-for="v in otherVariants" :key="v.id" :value="v.id">{{ v.name }}</option>
               </select>
-            </label>
-            <div class="flex gap-2 items-end">
-              <label class="text-[11px] text-slate-500 flex-1">Cost ($)
-                <input type="number" min="0" v-model.number="dt.cost" class="num-input" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <label class="text-xs font-medium text-slate-500">Origin (Point A)
+                <input list="city-list" v-model="activeVariant.origin.name" @change="onPlaceName(activeVariant.origin)"
+                       class="city-input" placeholder="e.g. London" />
               </label>
-              <label class="text-[11px] text-slate-500 flex-1">Time (h)
-                <input type="number" min="0" step="0.25" v-model.number="dt.duration" class="num-input" />
-              </label>
-              <label class="text-[11px] text-slate-500 flex items-center gap-1 pb-2">
-                <input type="checkbox" v-model="dt.oneWay" /> one-way (×2)
+              <label class="text-xs font-medium text-slate-500">Final Destination (Point B)
+                <input list="city-list" v-model="activeVariant.destination.name" @change="onPlaceName(activeVariant.destination)"
+                       class="city-input" placeholder="e.g. Lisbon" />
               </label>
             </div>
-            <p class="text-[11px] text-emerald-700">
-              Round-trip total: ${{ dayTripCost(dt) }} · {{ fmtH(dayTripTime(dt)) }}
-            </p>
-          </div>
-        </section>
 
-        <!-- Active variant leg editor -->
-        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <h2 class="font-semibold text-slate-700 flex items-center gap-2">
-            🧩 Legs — <span class="text-brand">{{ activeVariant ? activeVariant.name : '—' }}</span>
-          </h2>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
+                <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight INTO trip</p>
+                <div class="flex gap-2">
+                  <label class="text-[11px] text-slate-500 flex-1">Cost ($)
+                    <input type="number" min="0" v-model.number="activeVariant.flightIn.cost" class="num-input" />
+                  </label>
+                  <label class="text-[11px] text-slate-500 flex-1">Time (h)
+                    <input type="number" min="0" step="0.25" v-model.number="activeVariant.flightIn.duration" class="num-input" />
+                  </label>
+                </div>
+              </div>
+              <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
+                <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight OUT of trip</p>
+                <div class="flex gap-2">
+                  <label class="text-[11px] text-slate-500 flex-1">Cost ($)
+                    <input type="number" min="0" v-model.number="activeVariant.flightOut.cost" class="num-input" />
+                  </label>
+                  <label class="text-[11px] text-slate-500 flex-1">Time (h)
+                    <input type="number" min="0" step="0.25" v-model.number="activeVariant.flightOut.duration" class="num-input" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
 
-          <template v-if="activeVariant">
-            <!-- Reorderable destination chips -->
-            <div class="text-xs text-slate-500 mb-1">Order (drag arrows to reorder):</div>
+          <!-- Legs -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+            <h3 class="font-semibold text-slate-700 flex items-center gap-2">🛤️ Legs &amp; Route Order</h3>
+
+            <div class="text-xs text-slate-500">Order (use arrows to reorder):</div>
             <div class="space-y-1">
               <div v-for="(id, idx) in activeVariant.order" :key="id"
                    class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-2 py-1">
@@ -186,7 +212,6 @@
               </div>
             </div>
 
-            <!-- Inter-destination legs -->
             <div class="pt-2 space-y-2">
               <div v-for="leg in activeLegs" :key="leg.key"
                    class="border rounded-lg p-2" :style="{ borderColor: TRAVEL[leg.method].color + '55' }">
@@ -215,8 +240,29 @@
               </div>
               <p v-if="activeLegs.length===0" class="text-xs text-slate-400">Add 2+ destinations to create legs.</p>
             </div>
-          </template>
-        </section>
+          </section>
+
+          <!-- Variant-specific costs -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-slate-700 flex items-center gap-2">💼 Variant Costs
+                <span class="text-xs font-normal text-slate-400">e.g. car hire, rail pass</span></h3>
+              <button @click="addExtraCost" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add</button>
+            </div>
+            <p v-if="!activeVariant.extraCosts.length" class="text-xs text-slate-400">
+              Extra costs unique to this variant (added to its total only).
+            </p>
+            <div v-for="c in activeVariant.extraCosts" :key="c.id"
+                 class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+              <input v-model="c.label" class="flex-1 city-input !mt-0" placeholder="Cost label (e.g. Car hire)" />
+              <div class="relative">
+                <span class="absolute left-2 top-1.5 text-slate-400 text-sm">$</span>
+                <input type="number" min="0" v-model.number="c.amount" class="num-input !mt-0 w-24 !pl-5" />
+              </div>
+              <button @click="removeExtraCost(c.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
+            </div>
+          </section>
+        </div>
       </aside>
 
       <!-- ===================== RIGHT (map + dashboard) ===================== -->
@@ -242,6 +288,12 @@
           <div id="map" class="absolute inset-0"></div>
           <div class="absolute bottom-2 left-2 z-[500] bg-white/90 rounded-md px-2 py-1 text-[11px] text-slate-500 shadow">
             {{ mapProviderLabel }}
+          </div>
+          <!-- travel-method legend -->
+          <div class="absolute top-2 right-2 z-[500] bg-white/90 rounded-md px-2 py-1.5 text-[11px] shadow space-y-0.5">
+            <div v-for="(t,k) in TRAVEL" :key="k" class="flex items-center gap-1.5">
+              <span class="inline-block w-4 h-0.5" :style="{ background: t.color }"></span>{{ t.icon }} {{ t.label }}
+            </div>
           </div>
         </div>
 
@@ -294,6 +346,7 @@
   <!-- Modular scripts (load order matters; non-module so it runs from file://) -->
   <script src="./js/cities.js"></script>
   <script src="./js/models.js"></script>
+  <script src="./js/routing.js"></script>
   <script src="./js/map.js"></script>
   <script src="./js/app.js"></script>
 </body>

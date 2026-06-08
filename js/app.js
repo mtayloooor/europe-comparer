@@ -1,7 +1,7 @@
 /**
  * app.js
- * Vue 3 application root. Binds the data model (models.js), map abstraction
- * (map.js) and city gazetteer (cities.js) to the UI defined in index.html.
+ * Vue 3 application root. Binds the data model (models.js), routing (routing.js),
+ * map abstraction (map.js) and city gazetteer (cities.js) to the UI.
  */
 (function () {
   const { createApp, reactive, ref, computed, watch, onMounted, nextTick } = Vue;
@@ -13,13 +13,18 @@
       const loaded = M.load();
       const state = reactive(loaded || M.defaultState());
 
-      // Make sure an active variant always exists.
       if (!state.variants.find((v) => v.id === state.activeVariantId)) {
         state.activeVariantId = state.variants[0] ? state.variants[0].id : null;
       }
 
       const editingVariantId = ref(null);
       const syncPrompt = ref(null); // { mk, label, others, newData }
+      const copySource = ref(''); // selected "copy endpoints from" variant id
+
+      // Collapsible global-setup sections.
+      const showDestinations = ref(true);
+      const showDayTrips = ref(true);
+
       let mapCtl = null;
 
       const TRAVEL = M.TRAVEL;
@@ -35,8 +40,10 @@
       const activeVariant = computed(
         () => state.variants.find((v) => v.id === state.activeVariantId) || null
       );
+      const otherVariants = computed(() =>
+        state.variants.filter((v) => v.id !== state.activeVariantId)
+      );
 
-      // Count how many variants route through a given methodKey.
       function variantsUsing(mk) {
         return state.variants.filter((v) =>
           M.variantLegs(state, v).some((l) => l.mk === mk)
@@ -56,7 +63,7 @@
         const rows = state.variants.map((v) => {
           const totals = M.variantTotals(state, v);
           const names = v.order.map((id) => destById(id)?.name || '?');
-          const routeText = [state.origin.name || 'A', ...names, state.destination.name || 'B'].join(' → ');
+          const routeText = [v.origin.name || 'A', ...names, v.destination.name || 'B'].join(' → ');
           return { id: v.id, name: v.name, price: totals.price, time: totals.time, routeText };
         });
         if (rows.length) {
@@ -91,11 +98,10 @@
         }
       }
 
-      // ── Destinations ───────────────────────────────────────────────
+      // ── Destinations (global setup) ────────────────────────────────
       function addDestination() {
         const dest = M.destination('', state.destinations.length);
         state.destinations.push(dest);
-        // Append to every variant's order so it participates everywhere.
         state.variants.forEach((v) => v.order.push(dest.id));
       }
       function removeDestination(id) {
@@ -106,13 +112,34 @@
         });
       }
 
-      // ── Day trips ──────────────────────────────────────────────────
+      // ── Day trips (global setup) ───────────────────────────────────
       function addDayTrip() {
         if (!state.destinations.length) return;
         state.dayTrips.push(M.dayTrip(state.destinations[0].id, ''));
       }
       function removeDayTrip(id) {
         state.dayTrips = state.dayTrips.filter((dt) => dt.id !== id);
+      }
+
+      // ── Per-variant endpoints & flights ────────────────────────────
+      function copyEndpointsFrom(srcId) {
+        const src = state.variants.find((v) => v.id === srcId);
+        const v = activeVariant.value;
+        if (!src || !v) return;
+        v.origin = M.clone(src.origin);
+        v.destination = M.clone(src.destination);
+        v.flightIn = M.clone(src.flightIn);
+        v.flightOut = M.clone(src.flightOut);
+        copySource.value = '';
+      }
+
+      // ── Per-variant extra costs ────────────────────────────────────
+      function addExtraCost() {
+        activeVariant.value.extraCosts.push(M.extraCost('', 0));
+      }
+      function removeExtraCost(id) {
+        const v = activeVariant.value;
+        v.extraCosts = v.extraCosts.filter((c) => c.id !== id);
       }
 
       // ── Variant legs (order / method / estimates) ──────────────────
@@ -122,13 +149,9 @@
         if (j < 0 || j >= arr.length) return;
         [arr[idx], arr[j]] = [arr[j], arr[idx]];
       }
-
       function setLegMethod(leg, method) {
         activeVariant.value.methods[leg.key] = method;
       }
-
-      // Edit a leg estimate. If the same leg (pair + method) is used by other
-      // variants, prompt whether to apply globally or only here.
       function editLeg(leg, field, value) {
         if (Number.isNaN(value)) value = 0;
         const newData = { cost: leg.cost, duration: leg.duration, [field]: value };
@@ -141,11 +164,9 @@
             newData,
           };
         } else {
-          // No conflict — store in the global library so it inherits later.
           state.legLibrary[leg.mk] = newData;
         }
       }
-
       function resolveSync(mode) {
         const { mk, newData } = syncPrompt.value;
         if (mode === 'global') {
@@ -163,19 +184,20 @@
         return `Variant ${String.fromCharCode(65 + state.variants.length)}`;
       }
       function addVariant() {
-        const order = activeVariant.value
-          ? activeVariant.value.order.slice()
-          : state.destinations.map((d) => d.id);
-        const v = M.variant(nextVariantName(), order);
+        const base = activeVariant.value;
+        const order = base ? base.order.slice() : state.destinations.map((d) => d.id);
+        // New variants inherit the current endpoints/flights as a sensible start.
+        const v = M.variant(nextVariantName(), order, base || {});
         state.variants.push(v);
         state.activeVariantId = v.id;
       }
       function duplicateVariant() {
         if (!activeVariant.value) return;
         const src = activeVariant.value;
-        const copy = M.variant(`${src.name} (copy)`, src.order);
-        copy.methods = JSON.parse(JSON.stringify(src.methods));
-        copy.overrides = JSON.parse(JSON.stringify(src.overrides || {}));
+        const copy = M.variant(`${src.name} (copy)`, src.order, src);
+        copy.methods = M.clone(src.methods);
+        copy.overrides = M.clone(src.overrides || {});
+        copy.extraCosts = M.clone(src.extraCosts || []).map((c) => ({ ...c, id: M.uid('ec') }));
         state.variants.push(copy);
         state.activeVariantId = copy.id;
       }
@@ -197,10 +219,9 @@
         return !d || (!d.cost && !d.duration);
       }
       function autofillAll() {
-        if (isEmpty(state.flightIn)) Object.assign(state.flightIn, M.mockFor('flight'));
-        if (isEmpty(state.flightOut)) Object.assign(state.flightOut, M.mockFor('flight'));
-
         state.variants.forEach((v) => {
+          if (isEmpty(v.flightIn)) Object.assign(v.flightIn, M.mockFor('flight'));
+          if (isEmpty(v.flightOut)) Object.assign(v.flightOut, M.mockFor('flight'));
           M.variantLegs(state, v).forEach((leg) => {
             const existing = state.legLibrary[leg.mk];
             const override = v.overrides && v.overrides[leg.mk];
@@ -209,7 +230,6 @@
             }
           });
         });
-
         state.dayTrips.forEach((dt) => {
           if (!dt.cost) dt.cost = Math.round(20 + Math.random() * 80);
           if (!dt.duration) dt.duration = Math.round((1 + Math.random() * 3) * 4) / 4;
@@ -232,12 +252,13 @@
         const reader = new FileReader();
         reader.onload = () => {
           try {
-            const data = JSON.parse(reader.result);
+            const data = M.migrate(JSON.parse(reader.result));
             Object.keys(state).forEach((k) => delete state[k]);
             Object.assign(state, data);
             if (!state.variants.find((v) => v.id === state.activeVariantId)) {
               state.activeVariantId = state.variants[0]?.id || null;
             }
+            recreateMap();
           } catch (err) {
             alert('Could not read that file — is it a valid export?');
           }
@@ -250,52 +271,130 @@
         const fresh = M.defaultState();
         Object.keys(state).forEach((k) => delete state[k]);
         Object.assign(state, fresh);
+        recreateMap();
       }
 
-      // ── Map ────────────────────────────────────────────────────────
+      // ── Map provider (OSM ⇄ Apple Maps) ────────────────────────────
       const mapProviderLabel = computed(() =>
-        mapCtl && mapCtl._impl === 'mapkit'
+        state.mapProvider === 'mapkit'
           ? 'Apple MapKit JS'
-          : 'Map: Leaflet / OpenStreetMap (swappable for Apple MapKit JS)'
+          : 'Leaflet / OpenStreetMap'
       );
 
-      function renderMap() {
-        if (!mapCtl || !activeVariant.value) return;
-        const stops = activeVariant.value.order.map((id) => destById(id)).filter(Boolean);
+      function buildMapPayload() {
+        const v = activeVariant.value;
+        const stops = v.order.map((id) => destById(id)).filter(Boolean);
+
+        const markers = [
+          { lat: v.origin.lat, lng: v.origin.lng, label: 'A', color: '#1e293b', name: v.origin.name || 'Origin' },
+          ...stops.map((s, i) => ({ lat: s.lat, lng: s.lng, label: String(i + 1), color: s.color, name: s.name || 'Unnamed' })),
+          { lat: v.destination.lat, lng: v.destination.lng, label: 'B', color: '#1e293b', name: v.destination.name || 'Destination' },
+        ];
+
+        // Ordered node sequence with the travel method for each segment.
+        const seq = [v.origin, ...stops, v.destination];
+        const segments = [];
+        for (let i = 0; i < seq.length - 1; i += 1) {
+          let method;
+          if (i === 0 || i === seq.length - 2) {
+            method = 'flight'; // inbound / outbound flights
+          } else {
+            const fromId = v.order[i - 1];
+            const toId = v.order[i];
+            method = (v.methods && v.methods[M.pairKey(fromId, toId)]) || 'train';
+          }
+          segments.push({ from: seq[i], to: seq[i + 1], method });
+        }
+
         const dayTrips = state.dayTrips
           .map((dt) => {
             const parent = destById(dt.destinationId);
-            return {
-              name: dt.name,
-              lat: dt.lat,
-              lng: dt.lng,
-              parentLat: parent?.lat,
-              parentLng: parent?.lng,
-            };
+            return { name: dt.name, lat: dt.lat, lng: dt.lng, parentLat: parent?.lat, parentLng: parent?.lng };
           })
           .filter((dt) => dt.lat != null);
-        mapCtl.render({
-          origin: state.origin,
-          destination: state.destination,
-          stops,
-          dayTrips,
-        });
+
+        return { markers, segments, dayTrips };
       }
 
-      onMounted(() => {
+      let renderSeq = 0;
+      async function renderMap() {
+        if (!mapCtl || !activeVariant.value) return;
+        const token = (renderSeq += 1);
+        const { markers, segments, dayTrips } = buildMapPayload();
+
+        const legs = await Promise.all(
+          segments.map(async (seg) => {
+            const { coords, approximate } = await window.RouteService.getLeg(seg.from, seg.to, seg.method);
+            return {
+              coords,
+              color: TRAVEL[seg.method].color,
+              dashed: approximate || seg.method === 'flight' || seg.method === 'ferry',
+            };
+          })
+        );
+
+        if (token !== renderSeq) return; // a newer render superseded this one
+        mapCtl.render({ markers, legs, dayTrips });
+      }
+
+      function createMap() {
         mapCtl = window.MapController.create('map', {
-          provider: 'leaflet', // change to 'mapkit' + supply token to use Apple Maps
-          mapkitToken: window.MAPKIT_TOKEN,
+          provider: state.mapProvider,
+          mapkitToken: state.mapkitToken,
+          onMapKitError: () => {
+            alert('Apple Maps could not load (missing/invalid token or MapKit JS unavailable). Falling back to OpenStreetMap.');
+            state.mapProvider = 'leaflet';
+          },
         });
+      }
+      function recreateMap() {
+        if (mapCtl && mapCtl.destroy) mapCtl.destroy();
+        createMap();
+        nextTick(renderMap);
+      }
+
+      function setMapProvider(provider) {
+        if (provider === state.mapProvider) return;
+        if (provider === 'mapkit' && !state.mapkitToken) {
+          if (!promptForToken()) return; // cancelled — stay on current provider
+        }
+        state.mapProvider = provider;
+        recreateMap();
+      }
+      function promptForToken() {
+        const t = window.prompt(
+          'Paste your Apple MapKit JS token (JWT).\n' +
+            'Get one at developer.apple.com → Certificates, IDs & Profiles → Maps IDs / Keys.\n' +
+            'It is stored locally and included in your export file.',
+          state.mapkitToken || ''
+        );
+        if (t && t.trim()) {
+          state.mapkitToken = t.trim();
+          return true;
+        }
+        return false;
+      }
+      function changeToken() {
+        if (promptForToken() && state.mapProvider === 'mapkit') recreateMap();
+      }
+
+      // ── Lifecycle + reactive side-effects ──────────────────────────
+      onMounted(() => {
+        createMap();
         renderMap();
       });
 
-      // ── Reactive side-effects: persist + re-render map ─────────────
+      let renderTimer = null;
+      function scheduleRender() {
+        clearTimeout(renderTimer);
+        renderTimer = setTimeout(renderMap, 350); // debounce network-bound route lookups
+      }
+
       watch(
         state,
         () => {
           M.save(state);
-          nextTick(renderMap);
+          scheduleRender();
         },
         { deep: true }
       );
@@ -306,7 +405,11 @@
         CITY_NAMES,
         editingVariantId,
         syncPrompt,
+        copySource,
+        showDestinations,
+        showDayTrips,
         activeVariant,
+        otherVariants,
         activeLegs,
         variantSummaries,
         minPrice,
@@ -321,6 +424,9 @@
         removeDestination,
         addDayTrip,
         removeDayTrip,
+        copyEndpointsFrom,
+        addExtraCost,
+        removeExtraCost,
         moveDest,
         setLegMethod,
         editLeg,
@@ -334,6 +440,8 @@
         exportData,
         importData,
         resetAll,
+        setMapProvider,
+        changeToken,
       };
     },
   }).mount('#app');

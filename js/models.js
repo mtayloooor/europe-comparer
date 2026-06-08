@@ -33,6 +33,7 @@
  */
 (function () {
   const STORAGE_KEY = 'europe-comparator-state-v1';
+  const SCHEMA_VERSION = 2;
 
   // Travel methods with visual identity.
   const TRAVEL = {
@@ -87,8 +88,34 @@
     };
   }
 
-  function variant(name, order) {
-    return { id: uid('v'), name, order: order.slice(), methods: {}, overrides: {} };
+  function clone(obj) {
+    return obj ? JSON.parse(JSON.stringify(obj)) : obj;
+  }
+
+  function emptyFlight() {
+    return { cost: 0, duration: 0 };
+  }
+
+  // Endpoints & flights now live ON the variant (they may differ per variant).
+  // `endpoints` (optional) seeds origin/destination/flightIn/flightOut.
+  function variant(name, order, endpoints) {
+    const ep = endpoints || {};
+    return {
+      id: uid('v'),
+      name,
+      origin: ep.origin ? clone(ep.origin) : place(''),
+      destination: ep.destination ? clone(ep.destination) : place(''),
+      flightIn: ep.flightIn ? clone(ep.flightIn) : emptyFlight(),
+      flightOut: ep.flightOut ? clone(ep.flightOut) : emptyFlight(),
+      order: order.slice(),
+      methods: {},
+      overrides: {},
+      extraCosts: [], // [{ id, label, amount }] — variant-specific costs (e.g. car hire)
+    };
+  }
+
+  function extraCost(label, amount) {
+    return { id: uid('ec'), label: label || '', amount: amount || 0 };
   }
 
   // ── Key helpers ──────────────────────────────────────────────────────
@@ -109,19 +136,48 @@
       destination('Prague', 3),
     ];
     const order = dests.map((d) => d.id);
-    const v1 = variant('Variant A', order);
-    const v2 = variant('Variant B', [order[0], order[2], order[1], order[3]]);
+    const endpoints = { origin: place('London'), destination: place('Lisbon') };
+    const v1 = variant('Variant A', order, endpoints);
+    const v2 = variant('Variant B', [order[0], order[2], order[1], order[3]], endpoints);
     return {
-      origin: place('London'),
-      destination: place('Lisbon'),
-      flightIn: { cost: 0, duration: 0 },
-      flightOut: { cost: 0, duration: 0 },
+      version: SCHEMA_VERSION,
       destinations: dests,
       dayTrips: [],
       legLibrary: {},
       variants: [v1, v2],
       activeVariantId: v1.id,
+      mapProvider: 'leaflet', // 'leaflet' (OSM) | 'mapkit' (Apple Maps)
+      mapkitToken: '',
     };
+  }
+
+  // Migrate older persisted/imported state to the current schema in place.
+  function migrate(state) {
+    if (!state || typeof state !== 'object') return state;
+    if (!state.version || state.version < 2) {
+      // v1 held endpoints/flights globally; move them onto every variant.
+      const g = {
+        origin: state.origin,
+        destination: state.destination,
+        flightIn: state.flightIn,
+        flightOut: state.flightOut,
+      };
+      (state.variants || []).forEach((v) => {
+        if (!v.origin) v.origin = clone(g.origin) || place('');
+        if (!v.destination) v.destination = clone(g.destination) || place('');
+        if (!v.flightIn) v.flightIn = clone(g.flightIn) || emptyFlight();
+        if (!v.flightOut) v.flightOut = clone(g.flightOut) || emptyFlight();
+        if (!Array.isArray(v.extraCosts)) v.extraCosts = [];
+      });
+      delete state.origin;
+      delete state.destination;
+      delete state.flightIn;
+      delete state.flightOut;
+      state.version = SCHEMA_VERSION;
+    }
+    if (state.mapProvider == null) state.mapProvider = 'leaflet';
+    if (state.mapkitToken == null) state.mapkitToken = '';
+    return state;
   }
 
   // ── Persistence ──────────────────────────────────────────────────────
@@ -136,7 +192,7 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
-      return JSON.parse(raw);
+      return migrate(JSON.parse(raw));
     } catch (e) {
       console.warn('Could not load state:', e);
       return null;
@@ -182,10 +238,11 @@
     return (dt.duration || 0) * (dt.oneWay ? 2 : 1);
   }
 
-  // Total price & time for a variant.
+  // Total price & time for a variant. Endpoints/flights and extra costs are
+  // now per-variant; day trips remain a global setup tool shared by all.
   function variantTotals(state, vrt) {
-    let price = (state.flightIn.cost || 0) + (state.flightOut.cost || 0);
-    let time = (state.flightIn.duration || 0) + (state.flightOut.duration || 0);
+    let price = (vrt.flightIn.cost || 0) + (vrt.flightOut.cost || 0);
+    let time = (vrt.flightIn.duration || 0) + (vrt.flightOut.duration || 0);
 
     variantLegs(state, vrt).forEach((leg) => {
       price += leg.cost;
@@ -195,6 +252,10 @@
     state.dayTrips.forEach((dt) => {
       price += dayTripCost(dt);
       time += dayTripTime(dt);
+    });
+
+    (vrt.extraCosts || []).forEach((c) => {
+      price += c.amount || 0;
     });
 
     return { price: Math.round(price), time };
@@ -217,13 +278,16 @@
     MOCK_RANGES,
     DEST_COLORS,
     uid,
+    clone,
     place,
     destination,
     dayTrip,
     variant,
+    extraCost,
     pairKey,
     methodKey,
     defaultState,
+    migrate,
     save,
     load,
     getLegData,
