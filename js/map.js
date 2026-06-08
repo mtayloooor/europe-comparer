@@ -29,6 +29,17 @@
     return pts;
   }
 
+  // A signature of the plotted *places* (markers + day trips), order-independent.
+  // Used to decide when to (re)frame the map — so changing travel methods or
+  // reordering destinations (which don't change the set of places) leaves the
+  // user's current zoom/pan untouched.
+  function placesKey(markers, dayTrips) {
+    const pts = [];
+    markers.forEach((m) => m.lat != null && pts.push(m.lat.toFixed(3) + ',' + m.lng.toFixed(3)));
+    dayTrips.forEach((d) => d.lat != null && pts.push(d.lat.toFixed(3) + ',' + d.lng.toFixed(3)));
+    return pts.sort().join('|');
+  }
+
   // ── Leaflet / OpenStreetMap adapter (default fallback) ────────────────
   function LeafletAdapter(elementId) {
     const map = L.map(elementId, { zoomControl: true }).setView(EUROPE_CENTER, 4);
@@ -38,6 +49,7 @@
     }).addTo(map);
 
     let layers = [];
+    let lastFitKey = null;
     const onResize = () => map.invalidateSize();
     setTimeout(onResize, 200);
     window.addEventListener('resize', onResize);
@@ -97,9 +109,15 @@
         }
       });
 
-      const pts = allPoints(markers, legs, dayTrips);
-      if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts).pad(0.25));
-      else if (pts.length === 1) map.setView(pts[0], 5);
+      // Only (re)frame when the set of places changes — preserve the user's
+      // zoom/pan when they're just changing travel methods or reordering.
+      const key = placesKey(markers, dayTrips);
+      if (key !== lastFitKey) {
+        const pts = allPoints(markers, legs, dayTrips);
+        if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts).pad(0.25));
+        else if (pts.length === 1) map.setView(pts[0], 5);
+        lastFitKey = key;
+      }
     }
 
     function destroy() {
@@ -126,6 +144,7 @@
     const map = new mapkit.Map(elementId);
     let annotations = [];
     let overlays = [];
+    let lastFitKey = null;
 
     function clear() {
       if (annotations.length) map.removeAnnotations(annotations);
@@ -178,7 +197,12 @@
       if (overlays.length) map.addOverlays(overlays);
       if (annotations.length) {
         map.addAnnotations(annotations);
-        map.showItems(annotations);
+        // Only reframe when the set of places changes (not on method/order edits).
+        const key = placesKey(markers, dayTrips);
+        if (key !== lastFitKey) {
+          map.showItems(annotations);
+          lastFitKey = key;
+        }
       }
     }
 
