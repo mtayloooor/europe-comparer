@@ -268,9 +268,9 @@
                    class="border rounded-lg p-2" :style="{ borderColor: TRAVEL[leg.method].color + '55' }">
                 <div class="flex items-center gap-2 text-sm font-medium">
                   <app-icon :name="TRAVEL[leg.method].lucide" :size="15" :style="{ color: TRAVEL[leg.method].color }"></app-icon>
-                  <span>{{ leg.fromName }}</span>
+                  <span>{{ leg.fromName }}<span v-if="leg.method==='train' && leg.fromStation" class="font-normal text-slate-400"> ({{ leg.fromStation }})</span></span>
                   <app-icon name="lucide:arrow-right" :size="13" class="text-slate-400"></app-icon>
-                  <span>{{ leg.toName }}</span>
+                  <span>{{ leg.toName }}<span v-if="leg.method==='train' && leg.toStation" class="font-normal text-slate-400"> ({{ leg.toStation }})</span></span>
                   <span class="ml-auto flex items-center gap-1">
                     <span v-if="leg.kind!=='mid'" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
                       {{ leg.kind==='origin' ? 'arrival → 1st' : 'last → departure' }}</span>

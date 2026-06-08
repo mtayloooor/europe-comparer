@@ -72,11 +72,22 @@
         const coords = await RouteService.transitProvider(from, to, method);
         result = { coords, approximate: false };
       } else if (method === 'train' && window.RailRouter) {
-        // Approximate the rail path by snapping to OpenStreetMap track geometry.
-        const coords = await window.RailRouter.route(from, to);
-        result = coords
-          ? { coords, approximate: false }
-          : { coords: straight(from, to), approximate: true };
+        // Resolve the best station for each city, then snap the rail path
+        // station-to-station along OpenStreetMap track geometry.
+        const [fromStation, toStation] = await Promise.all([
+          window.RailRouter.resolveStation(from),
+          window.RailRouter.resolveStation(to),
+        ]);
+        const a = fromStation || from;
+        const b = toStation || to;
+        const rail = await window.RailRouter.route(a, b);
+        const stations = {
+          fromStation: fromStation ? fromStation.name : null,
+          toStation: toStation ? toStation.name : null,
+        };
+        result = rail
+          ? { coords: [[from.lat, from.lng], ...rail, [to.lat, to.lng]], approximate: false, ...stations }
+          : { coords: straight(from, to), approximate: true, ...stations };
       } else if (DRIVING_METHODS.has(method)) {
         result = { coords: await drivingRoute(from, to), approximate: false };
       } else if (STRAIGHT_METHODS.has(method)) {
