@@ -43,17 +43,23 @@
   async function search(query) {
     const q = (query || '').trim();
     if (q.length < 2) return [];
+    const D = window.DebugLog;
     try {
       const res = await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=6`);
       if (res.ok) {
         const data = await res.json();
         const out = (data.features || []).map((f) => fromPhoton(f, q));
+        D && D.info(`Geocode "${q}" → ${out.length} results (Photon)`);
         if (out.length) return out;
+      } else {
+        D && D.warn(`Geocode HTTP ${res.status} (Photon)`);
       }
     } catch (e) {
-      console.warn('Geocoder unavailable, using offline gazetteer:', e.message);
+      D && D.warn(`Geocoder unavailable (${e.message}), using offline gazetteer`);
     }
-    return fromGazetteer(q);
+    const fb = fromGazetteer(q);
+    D && D.info(`Geocode "${q}" → ${fb.length} results (offline gazetteer)`);
+    return fb;
   }
 
   window.GeoSearch = { search };

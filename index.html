@@ -362,6 +362,39 @@
       </main>
     </div>
 
+    <!-- Debug log: floating toggle + panel -->
+    <button @click="showDebug = !showDebug"
+            class="fixed bottom-3 right-3 z-[1900] px-3 py-2 rounded-full shadow-lg text-white text-xs font-medium inline-flex items-center gap-1"
+            :class="showDebug ? 'bg-slate-700' : 'bg-slate-500 hover:bg-slate-600'">
+      <app-icon name="lucide:terminal" :size="14"></app-icon> Debug
+      <span v-if="debugEntries.length" class="bg-white/25 rounded-full px-1.5">{{ debugEntries.length }}</span>
+    </button>
+
+    <div v-if="showDebug"
+         class="fixed bottom-16 right-3 z-[1900] w-[min(95vw,520px)] h-[min(60vh,420px)] bg-slate-900 text-slate-100 rounded-lg shadow-2xl flex flex-col border border-slate-700">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
+        <span class="text-xs font-semibold inline-flex items-center gap-1.5">
+          <app-icon name="lucide:terminal" :size="14"></app-icon> Debug log
+          <span class="text-slate-400 font-normal">({{ debugEntries.length }})</span></span>
+        <div class="flex items-center gap-1">
+          <button @click="copyDebug" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px] inline-flex items-center gap-1">
+            <app-icon name="lucide:copy" :size="12"></app-icon> Copy</button>
+          <button @click="clearDebug" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px] inline-flex items-center gap-1">
+            <app-icon name="lucide:trash-2" :size="12"></app-icon> Clear</button>
+          <button @click="showDebug = false" class="px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 inline-flex">
+            <app-icon name="lucide:x" :size="13"></app-icon></button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-auto font-mono text-[11px] leading-relaxed p-2 space-y-0.5">
+        <p v-if="!debugEntries.length" class="text-slate-500">No log entries yet. Interact with the map (e.g. set a train leg) to see activity.</p>
+        <div v-for="e in debugEntries" :key="e.id" class="flex gap-2"
+             :class="e.level==='error' ? 'text-rose-300' : e.level==='warn' ? 'text-amber-300' : 'text-slate-300'">
+          <span class="text-slate-500 shrink-0">{{ e.t }}</span>
+          <span class="break-words">{{ e.message }}<span v-if="e.data" class="text-slate-500"> · {{ JSON.stringify(e.data) }}</span></span>
+        </div>
+      </div>
+    </div>
+
     <!-- Global-sync prompt modal -->
     <div v-if="syncPrompt" class="fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-4">
       <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3">
@@ -379,6 +412,7 @@
   </div>
 
   <!-- Modular scripts (load order matters; non-module so it runs from file://) -->
+  <script src="./js/debug.js"></script>
   <script src="./js/cities.js"></script>
   <script src="./js/geocode.js"></script>
   <script src="./js/models.js"></script>
