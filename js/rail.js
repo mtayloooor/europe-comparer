@@ -162,11 +162,11 @@
    * @returns {Promise<{name,lat,lng}|null>}
    */
   const stationInflight = new Map();
-  async function resolveStation(place) {
+  async function resolveStation(place, force) {
     if (!place || place.lat == null || place.lng == null) return null;
     const key = `${place.lat.toFixed(3)},${place.lng.toFixed(3)}|${norm(place.name)}`;
-    if (stationCache.has(key)) return stationCache.get(key);
-    if (stationInflight.has(key)) return stationInflight.get(key);
+    if (!force && stationCache.has(key)) return stationCache.get(key);
+    if (!force && stationInflight.has(key)) return stationInflight.get(key);
     const p = resolveStationImpl(place, key);
     stationInflight.set(key, p);
     try {
@@ -384,7 +384,7 @@
 
   // ── Public entry ─────────────────────────────────────────────────────
   const routeInflight = new Map();
-  async function route(from, to) {
+  async function route(from, to, force) {
     if (
       !from || !to ||
       from.lat == null || from.lng == null ||
@@ -400,8 +400,8 @@
     }
 
     const key = `${from.lat.toFixed(3)},${from.lng.toFixed(3)}->${to.lat.toFixed(3)},${to.lng.toFixed(3)}`;
-    if (cache.has(key)) return cache.get(key);
-    if (routeInflight.has(key)) return routeInflight.get(key);
+    if (!force && cache.has(key)) return cache.get(key);
+    if (!force && routeInflight.has(key)) return routeInflight.get(key);
     const p = routeImpl(from, to, key, distKm);
     routeInflight.set(key, p);
     try {

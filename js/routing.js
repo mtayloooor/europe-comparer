@@ -65,8 +65,9 @@
     }
 
     const railOn = method === 'train' && opts.rail;
+    const force = !!opts.force;
     const key = `${method}${railOn ? '+rail' : ''}:${from.lat},${from.lng}->${to.lat},${to.lng}`;
-    if (cache.has(key)) return cache.get(key);
+    if (!force && cache.has(key)) return cache.get(key);
 
     let result;
     try {
@@ -77,12 +78,12 @@
         // Resolve the best station for each city, then snap the rail path
         // station-to-station along OpenStreetMap track geometry.
         const [fromStation, toStation] = await Promise.all([
-          window.RailRouter.resolveStation(from),
-          window.RailRouter.resolveStation(to),
+          window.RailRouter.resolveStation(from, force),
+          window.RailRouter.resolveStation(to, force),
         ]);
         const a = fromStation || from;
         const b = toStation || to;
-        const rail = await window.RailRouter.route(a, b);
+        const rail = await window.RailRouter.route(a, b, force);
         const stations = {
           fromStation: fromStation ? fromStation.name : null,
           toStation: toStation ? toStation.name : null,
