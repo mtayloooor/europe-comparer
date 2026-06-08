@@ -156,6 +156,7 @@
       activeVariantId: v1.id,
       mapProvider: 'leaflet', // 'leaflet' (OSM) | 'mapkit' (Apple Maps)
       mapkitToken: '',
+      travelColors: {}, // per-method colour overrides, e.g. { train: '#0a0' }
     };
   }
 
@@ -186,6 +187,7 @@
     }
     if (state.mapProvider == null) state.mapProvider = 'leaflet';
     if (state.mapkitToken == null) state.mapkitToken = '';
+    if (!state.travelColors) state.travelColors = {};
     return state;
   }
 

@@ -71,8 +71,41 @@
       });
     }
 
-    function render({ markers, legs, dayTrips }) {
+    const lerp = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+
+    // A fading multi-segment trail from `far` (transparent) to `city` (opaque),
+    // plus a small arrowhead at t.arrow.at rotated to t.arrow.deg.
+    function drawTrail(t) {
+      const steps = 9;
+      for (let i = 0; i < steps; i += 1) {
+        const op = 0.06 + 0.5 * ((i + 1) / steps); // fades in toward the city
+        const seg = L.polyline([lerp(t.far, t.city, i / steps), lerp(t.far, t.city, (i + 1) / steps)], {
+          color: t.color,
+          weight: 3,
+          opacity: op,
+          interactive: false,
+        }).addTo(map);
+        layers.push(seg);
+      }
+      const arrow = L.marker(t.arrow.at, {
+        interactive: false,
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+                 border-bottom:9px solid ${t.color};transform:rotate(${t.arrow.deg}deg);"></div>`,
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+        }),
+      }).addTo(map);
+      layers.push(arrow);
+    }
+
+    function render({ markers, legs, dayTrips, trails, onLegHover }) {
       clear();
+
+      // Fading arrival/departure trails (drawn under everything else).
+      (trails || []).forEach((t) => drawTrail(t));
+
       legs.forEach((leg) => {
         if (leg.coords.length < 2) return;
         const line = L.polyline(leg.coords, {
@@ -81,6 +114,15 @@
           opacity: 0.85,
           dashArray: leg.dashed ? '8,8' : null,
         }).addTo(map);
+        if (leg.tooltip) line.bindTooltip(leg.tooltip, { sticky: true, direction: 'top' });
+        if (onLegHover && leg.key) {
+          // A wide invisible hit-line makes the thin route easier to hover.
+          const hit = L.polyline(leg.coords, { color: '#000', weight: 16, opacity: 0 }).addTo(map);
+          if (leg.tooltip) hit.bindTooltip(leg.tooltip, { sticky: true, direction: 'top' });
+          hit.on('mouseover', () => onLegHover(leg.key));
+          hit.on('mouseout', () => onLegHover(null));
+          layers.push(hit);
+        }
         layers.push(line);
       });
 
@@ -155,8 +197,24 @@
 
     const coord = (lat, lng) => new mapkit.Coordinate(lat, lng);
 
-    function render({ markers, legs, dayTrips }) {
+    const lerp = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+
+    function render({ markers, legs, dayTrips, trails }) {
       clear();
+
+      // Fading arrival/departure trails.
+      (trails || []).forEach((t) => {
+        const steps = 9;
+        for (let i = 0; i < steps; i += 1) {
+          const op = 0.06 + 0.5 * ((i + 1) / steps);
+          overlays.push(
+            new mapkit.PolylineOverlay(
+              [lerp(t.far, t.city, i / steps), lerp(t.far, t.city, (i + 1) / steps)].map(([la, ln]) => coord(la, ln)),
+              { style: new mapkit.Style({ lineWidth: 3, strokeColor: t.color, strokeOpacity: op }) }
+            )
+          );
+        }
+      });
 
       legs.forEach((leg) => {
         if (leg.coords.length < 2) return;

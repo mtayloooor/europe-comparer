@@ -20,6 +20,43 @@
       const editingVariantId = ref(null);
       const syncPrompt = ref(null); // { mk, label, others, newData }
       const copySource = ref(''); // selected "copy endpoints from" variant id
+      const showAutofillHelp = ref(false); // autofill explainer modal
+      const hoveredLegKey = ref(null); // leg currently hovered on the map
+
+      // Effective colour for a travel method (user override → default).
+      const colorOf = (method) =>
+        (state.travelColors && state.travelColors[method]) || (M.TRAVEL[method] && M.TRAVEL[method].color) || '#64748b';
+      function setColor(method, hex) {
+        if (!state.travelColors) state.travelColors = {};
+        state.travelColors[method] = hex;
+      }
+
+      // ── Small geometry helpers (equirectangular; fine over short spans) ──
+      const D2R = Math.PI / 180;
+      function bearing(aLat, aLng, bLat, bLng) {
+        const latC = ((aLat + bLat) / 2) * D2R;
+        const dx = (bLng - aLng) * Math.cos(latC);
+        const dy = bLat - aLat;
+        return (Math.atan2(dx, dy) * 180) / Math.PI; // 0 = north, 90 = east
+      }
+      function project(lat, lng, deg, distKm) {
+        const dy = distKm * Math.cos(deg * D2R);
+        const dx = distKm * Math.sin(deg * D2R);
+        return [lat + dy / 110.574, lng + dx / (111.32 * Math.cos(lat * D2R))];
+      }
+      function haversineKm(a, b) {
+        const dLat = (b[0] - a[0]) * D2R;
+        const dLng = (b[1] - a[1]) * D2R;
+        const s =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(a[0] * D2R) * Math.cos(b[0] * D2R) * Math.sin(dLng / 2) ** 2;
+        return 2 * 6371 * Math.asin(Math.sqrt(s));
+      }
+      function pathKm(coords) {
+        let d = 0;
+        for (let i = 0; i < coords.length - 1; i += 1) d += haversineKm(coords[i], coords[i + 1]);
+        return d;
+      }
 
       // Collapsible global-setup sections.
       const showDestinations = ref(true);
@@ -377,7 +414,15 @@
           const to = seq[i + 1];
           const legKey = M.pairKey(from.id, to.id);
           const method = (v.methods && v.methods[legKey]) || 'train';
-          segments.push({ from, to, method, legKey, rail: railEnabledFor(v, legKey) });
+          const data = M.getLegData(state, v, from.id, to.id, method);
+          segments.push({
+            from, to, method, legKey,
+            rail: railEnabledFor(v, legKey),
+            fromName: from.name || 'Unnamed',
+            toName: to.name || 'Unnamed',
+            cost: data.cost || 0,
+            duration: data.duration || 0,
+          });
         }
 
         const dayTrips = state.dayTrips
@@ -387,7 +432,32 @@
           })
           .filter((dt) => dt.lat != null);
 
-        return { markers, segments, dayTrips };
+        // Fading "arrival/departure" trails for the flown-into/out-of endpoints.
+        const trails = [];
+        const withCoords = seq.filter((p) => p.lat != null);
+        if (withCoords.length >= 2) {
+          trails.push(makeTrail(withCoords[0], withCoords[1], 'in'));
+          trails.push(makeTrail(withCoords[withCoords.length - 1], withCoords[withCoords.length - 2], 'out'));
+        }
+
+        return { markers, segments, dayTrips, trails };
+      }
+
+      // Build a short trail anchored at a city, extending ~90km to the far side
+      // away from its neighbour (so it reads as arriving from / leaving to beyond).
+      function makeTrail(city, neighbour, dir) {
+        const brg = bearing(neighbour.lat, neighbour.lng, city.lat, city.lng); // neighbour → city, continued
+        const far = project(city.lat, city.lng, brg, 90);
+        const cityPt = [city.lat, city.lng];
+        return {
+          color: colorOf('flight'),
+          far,
+          city: cityPt,
+          // 'in' arrow sits at the city pointing inward; 'out' sits at the far tip pointing away.
+          arrow: dir === 'in'
+            ? { at: cityPt, deg: bearing(far[0], far[1], cityPt[0], cityPt[1]) }
+            : { at: far, deg: bearing(cityPt[0], cityPt[1], far[0], far[1]) },
+        };
       }
 
       let renderSeq = 0;
@@ -414,16 +484,27 @@
               stationByPlace[seg.from.id] = res.fromStation || null;
               stationByPlace[seg.to.id] = res.toStation || null;
             }
+            const distKm = res.coords.length >= 2 ? pathKm(res.coords) : 0;
+            const tooltip =
+              `<b>${escapeHtml(seg.fromName)} → ${escapeHtml(seg.toName)}</b><br>` +
+              `${TRAVEL[seg.method].label} · $${Math.round(seg.cost).toLocaleString()} · ` +
+              `${fmtH(seg.duration)} · ${distKm < 1 ? '—' : Math.round(distKm) + ' km'}`;
             return {
+              key: seg.legKey,
               coords: res.coords,
-              color: TRAVEL[seg.method].color,
+              color: colorOf(seg.method),
               dashed: res.approximate || seg.method === 'flight' || seg.method === 'ferry',
+              tooltip,
             };
           })
         );
 
         if (token !== renderSeq) return; // a newer render superseded this one
-        mapCtl.render({ markers, legs, dayTrips });
+        mapCtl.render({ markers, legs, dayTrips, trails, onLegHover: (key) => { hoveredLegKey.value = key; } });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       }
 
       function createMap() {
@@ -493,6 +574,11 @@
         TRAVEL,
         editingVariantId,
         syncPrompt,
+        showAutofillHelp,
+        hoveredLegKey,
+        colorOf,
+        setColor,
+        MOCK_RANGES: M.MOCK_RANGES,
         debugEntries,
         showDebug,
         clearDebug,
