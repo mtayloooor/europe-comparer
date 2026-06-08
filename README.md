@@ -110,19 +110,29 @@ for fully offline use later. A few emoji are intentionally kept in the
 
 ## Transit (Train / public-transport) routing
 
-True rail/PT route geometry isn't available from a free API, and **Apple MapKit
-JS has no transit directions** (Automobile/Walking only). **Google Maps can**
-return transit polylines (Directions API / Routes API `mode=transit`, or the
-Maps JS `DirectionsService` with `travelMode: TRANSIT`), **but**:
+Train legs are **approximated along real rail geometry**: for a Train leg the app
+fetches the main running lines in a narrow corridor between the two points from
+**Overpass (OpenStreetMap)**, builds a connectivity graph from the rail ways, and
+runs a shortest-path along the tracks (see `js/rail.js`). It's bounded by a
+corridor polygon, a max-distance cap, a request timeout and a node-count guard,
+and **falls back to a straight dashed line** whenever Overpass is unreachable,
+the leg is too long, or no connected rail path is found. It's an approximation —
+it follows track geometry but knows nothing of schedules or whether a passenger
+service actually runs.
+
+For *exact* journey geometry (true timetabled routes) you'd still want a transit
+router. Google Maps can return transit polylines (Directions / Routes API
+`mode=transit`, or the Maps JS `DirectionsService` with `travelMode: TRANSIT`),
+**but**:
 
 1. requires an API key with **billing enabled**;
 2. the REST Directions API is **server-side only** (browser CORS) → needs a proxy;
 3. Google's ToS requires Google-derived geometry to be displayed **on a Google
    map**, so drawing it on Leaflet/Apple is non-compliant.
 
-So Train legs use straight lines for now. The code is structured for a drop-in
-transit provider — assign an async function to `RouteService.transitProvider`
-(see `js/routing.js`) and Train/Bus legs will use it.
+For a fuller drop-in, assign an async function to `RouteService.transitProvider`
+(e.g. a MOTIS/Transitous call) and Train/Bus legs will use it ahead of the OSM
+snapping.
 
 ## Project structure
 
@@ -133,7 +143,8 @@ js/cities.js    built-in European city gazetteer (offline geocode fallback)
 js/geocode.js   GeoSearch: place search / geocoding via Photon (+ gazetteer fallback)
 js/place-search.js  <place-search> Vue autocomplete component (auto-flips up near the bottom)
 js/models.js    data models, factories, leg helpers, totals, persistence, migration
-js/routing.js   RouteService: per-method leg geometry (OSRM driving / straight / transit hook)
+js/rail.js      RailRouter: approximate rail path via OSM/Overpass track geometry
+js/routing.js   RouteService: per-method leg geometry (OSRM driving / rail snap / straight / transit hook)
 js/map.js       MapController: Leaflet adapter + Apple MapKit JS adapter
 js/app.js       Vue 3 application wiring it all together
 ```
