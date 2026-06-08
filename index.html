@@ -268,15 +268,26 @@
                    class="border rounded-lg p-2" :style="{ borderColor: TRAVEL[leg.method].color + '55' }">
                 <div class="flex items-center gap-2 text-sm font-medium">
                   <app-icon :name="TRAVEL[leg.method].lucide" :size="15" :style="{ color: TRAVEL[leg.method].color }"></app-icon>
-                  <span>{{ leg.fromName }}<span v-if="leg.method==='train' && leg.fromStation" class="font-normal text-slate-400"> ({{ leg.fromStation }})</span></span>
-                  <app-icon name="lucide:arrow-right" :size="13" class="text-slate-400"></app-icon>
-                  <span>{{ leg.toName }}<span v-if="leg.method==='train' && leg.toStation" class="font-normal text-slate-400"> ({{ leg.toStation }})</span></span>
+                  <span class="leading-tight">{{ leg.fromName }}
+                    <span v-if="leg.method==='train' && leg.fromStation" class="block font-normal text-slate-400 text-[10px] leading-tight">{{ leg.fromStation }}</span>
+                  </span>
+                  <app-icon name="lucide:arrow-right" :size="13" class="text-slate-400 shrink-0"></app-icon>
+                  <span class="leading-tight">{{ leg.toName }}
+                    <span v-if="leg.method==='train' && leg.toStation" class="block font-normal text-slate-400 text-[10px] leading-tight">{{ leg.toStation }}</span>
+                  </span>
                   <span class="ml-auto flex items-center gap-1">
                     <span v-if="leg.kind!=='mid'" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
                       {{ leg.kind==='origin' ? 'arrival → 1st' : 'last → departure' }}</span>
                     <span v-if="leg.shared" class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 inline-flex items-center gap-0.5"
                           title="Shared across variants — edits prompt to sync globally">
                       <app-icon name="lucide:link" :size="10"></app-icon> shared</span>
+                    <button v-if="leg.method==='train'" @click="toggleRailLeg(leg)"
+                            class="inline-flex p-1 rounded hover:bg-slate-100"
+                            :class="leg.railOn ? 'text-green-600' : 'text-slate-300'"
+                            :title="leg.railOn ? 'Using real rail route — click to revert to straight line' : 'Fetch real rail route for this leg (slower)'">
+                      <app-icon :name="leg.railLoading ? 'lucide:loader-circle' : 'lucide:train-front'" :size="16"
+                                :class="leg.railLoading ? 'animate-spin' : ''"></app-icon>
+                    </button>
                   </span>
                 </div>
                 <div class="flex gap-2 items-end mt-1">
