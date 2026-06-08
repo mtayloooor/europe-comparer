@@ -5,7 +5,8 @@
  *
  *   flight / ferry → straight line (great-circle-ish; rendered dashed)
  *   car / bus      → real driving route via OSRM (public OpenStreetMap router)
- *   train          → straight line for now (distinct styling)
+ *   train          → approximate rail path snapped to OSM track geometry
+ *                    (see rail.js); straight-line fallback if unavailable
  *
  * ── Real transit (Train / public transport) ────────────────────────────
  * Free routing APIs don't expose true rail/PT geometry, and Apple MapKit JS
@@ -70,6 +71,12 @@
       if (RouteService.transitProvider && (method === 'train' || method === 'bus')) {
         const coords = await RouteService.transitProvider(from, to, method);
         result = { coords, approximate: false };
+      } else if (method === 'train' && window.RailRouter) {
+        // Approximate the rail path by snapping to OpenStreetMap track geometry.
+        const coords = await window.RailRouter.route(from, to);
+        result = coords
+          ? { coords, approximate: false }
+          : { coords: straight(from, to), approximate: true };
       } else if (DRIVING_METHODS.has(method)) {
         result = { coords: await drivingRoute(from, to), approximate: false };
       } else if (STRAIGHT_METHODS.has(method)) {
