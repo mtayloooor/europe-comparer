@@ -63,6 +63,8 @@
       const showDestinations = ref(true);
       const showDayTrips = ref(true);
       const showEndpoints = ref(true);
+      const showVariantCosts = ref(true);
+      const showLegs = ref(true);
 
       // ── In-page debug log ──────────────────────────────────────────
       const debugEntries = reactive([]);
@@ -696,6 +698,8 @@
         showDestinations,
         showDayTrips,
         showEndpoints,
+        showVariantCosts,
+        showLegs,
         activeVariant,
         otherVariants,
         activeLegs,
