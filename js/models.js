@@ -118,6 +118,7 @@
       methods: {},
       overrides: {},
       extraCosts: [], // [{ id, label, amount }] — variant-specific costs (e.g. car hire)
+      railEnabled: {}, // { [legKey]: true } — train legs the user has fetched rail detail for
     };
   }
 
@@ -175,6 +176,7 @@
         if (!v.flightIn) v.flightIn = clone(g.flightIn) || emptyFlight();
         if (!v.flightOut) v.flightOut = clone(g.flightOut) || emptyFlight();
         if (!Array.isArray(v.extraCosts)) v.extraCosts = [];
+        if (!v.railEnabled) v.railEnabled = {};
       });
       delete state.origin;
       delete state.destination;

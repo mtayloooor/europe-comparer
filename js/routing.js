@@ -54,7 +54,8 @@
    * `approximate` is true when we fell back to a straight line (e.g. network
    * failure, or a method without true geometry).
    */
-  async function getLeg(from, to, method) {
+  async function getLeg(from, to, method, opts) {
+    opts = opts || {};
     if (
       !from || !to ||
       from.lat == null || from.lng == null ||
@@ -63,7 +64,8 @@
       return { coords: [], approximate: true };
     }
 
-    const key = `${method}:${from.lat},${from.lng}->${to.lat},${to.lng}`;
+    const railOn = method === 'train' && opts.rail;
+    const key = `${method}${railOn ? '+rail' : ''}:${from.lat},${from.lng}->${to.lat},${to.lng}`;
     if (cache.has(key)) return cache.get(key);
 
     let result;
@@ -71,7 +73,7 @@
       if (RouteService.transitProvider && (method === 'train' || method === 'bus')) {
         const coords = await RouteService.transitProvider(from, to, method);
         result = { coords, approximate: false };
-      } else if (method === 'train' && window.RailRouter) {
+      } else if (railOn && window.RailRouter) {
         // Resolve the best station for each city, then snap the rail path
         // station-to-station along OpenStreetMap track geometry.
         const [fromStation, toStation] = await Promise.all([

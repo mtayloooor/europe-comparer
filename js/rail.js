@@ -254,10 +254,11 @@
     return { coords, adj };
   }
 
-  function nearestNode(coords, lat, lng) {
+  function nearestNode(coords, lat, lng, allowed) {
     let best = null;
     let bestD = Infinity;
     for (const [id, c] of coords) {
+      if (allowed && !allowed.has(id)) continue;
       const d = haversine(lat, lng, c[0], c[1]);
       if (d < bestD) {
         bestD = d;
@@ -265,6 +266,42 @@
       }
     }
     return best;
+  }
+
+  // Largest connected component of the rail graph (union-find). Snapping to
+  // this avoids landing on isolated sidings/stubs that can't reach the line.
+  function largestComponent(coords, adj) {
+    const parent = new Map();
+    for (const id of coords.keys()) parent.set(id, id);
+    const find = (x) => {
+      while (parent.get(x) !== x) {
+        parent.set(x, parent.get(parent.get(x)));
+        x = parent.get(x);
+      }
+      return x;
+    };
+    for (const [u, edges] of adj) {
+      for (const { to } of edges) {
+        const ru = find(u);
+        const rv = find(to);
+        if (ru !== rv) parent.set(ru, rv);
+      }
+    }
+    const sizes = new Map();
+    let bestRoot = null;
+    let bestSize = 0;
+    for (const id of coords.keys()) {
+      const r = find(id);
+      const s = (sizes.get(r) || 0) + 1;
+      sizes.set(r, s);
+      if (s > bestSize) {
+        bestSize = s;
+        bestRoot = r;
+      }
+    }
+    const set = new Set();
+    for (const id of coords.keys()) if (find(id) === bestRoot) set.add(id);
+    return set;
   }
 
   // Minimal binary min-heap keyed by distance.
@@ -392,11 +429,13 @@
         cache.set(key, null);
         return null;
       }
-      const startId = nearestNode(coords, from.lat, from.lng);
-      const goalId = nearestNode(coords, to.lat, to.lng);
+      // Snap onto the main (largest connected) rail network, not stray sidings.
+      const main = largestComponent(coords, adj);
+      const startId = nearestNode(coords, from.lat, from.lng, main);
+      const goalId = nearestNode(coords, to.lat, to.lng, main);
       const snapA = startId != null ? haversine(from.lat, from.lng, coords.get(startId)[0], coords.get(startId)[1]) : -1;
       const snapB = goalId != null ? haversine(to.lat, to.lng, coords.get(goalId)[0], coords.get(goalId)[1]) : -1;
-      D && D.info(`Rail snap: start ${snapA.toFixed(1)}km, goal ${snapB.toFixed(1)}km from endpoints`);
+      D && D.info(`Rail snap: start ${snapA.toFixed(1)}km, goal ${snapB.toFixed(1)}km (main component ${main.size}/${coords.size} nodes)`);
       const railPath = startId != null && goalId != null ? dijkstra(adj, coords, startId, goalId) : null;
       if (!railPath || railPath.length < 2) {
         D && D.warn('Rail fallback: no connected path between snapped nodes (disconnected graph)');

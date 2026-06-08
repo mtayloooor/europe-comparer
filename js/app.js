@@ -71,14 +71,33 @@
 
       // Best railway station per place id, resolved during map render (train legs).
       const stationByPlace = reactive({});
+      // Leg keys currently fetching rail detail (for the per-leg button spinner).
+      const railLoading = reactive({});
+
+      function railEnabledFor(v, legKey) {
+        return !!(v && v.railEnabled && v.railEnabled[legKey]);
+      }
+      function toggleRailLeg(leg) {
+        const v = activeVariant.value;
+        if (!v) return;
+        if (!v.railEnabled) v.railEnabled = {};
+        if (v.railEnabled[leg.key]) {
+          delete v.railEnabled[leg.key];
+        } else {
+          v.railEnabled[leg.key] = true;
+        }
+      }
 
       const activeLegs = computed(() => {
         if (!activeVariant.value) return [];
-        return M.variantLegs(state, activeVariant.value).map((leg) => ({
+        const v = activeVariant.value;
+        return M.variantLegs(state, v).map((leg) => ({
           ...leg,
           shared: variantsUsing(leg.mk).length > 1,
           fromStation: stationByPlace[leg.fromId] || null,
           toStation: stationByPlace[leg.toId] || null,
+          railOn: railEnabledFor(v, leg.key),
+          railLoading: !!railLoading[leg.key],
         }));
       });
 
@@ -251,6 +270,10 @@
         Object.keys(src.overrides || {}).forEach((k) => {
           copy.overrides[remap(k, true)] = M.clone(src.overrides[k]);
         });
+        copy.railEnabled = {};
+        Object.keys(src.railEnabled || {}).forEach((k) => {
+          copy.railEnabled[remap(k, false)] = true;
+        });
         copy.extraCosts = M.clone(src.extraCosts || []).map((c) => ({ ...c, id: M.uid('ec') }));
         state.variants.push(copy);
         state.activeVariantId = copy.id;
@@ -352,8 +375,9 @@
         for (let i = 0; i < seq.length - 1; i += 1) {
           const from = seq[i];
           const to = seq[i + 1];
-          const method = (v.methods && v.methods[M.pairKey(from.id, to.id)]) || 'train';
-          segments.push({ from, to, method });
+          const legKey = M.pairKey(from.id, to.id);
+          const method = (v.methods && v.methods[legKey]) || 'train';
+          segments.push({ from, to, method, legKey, rail: railEnabledFor(v, legKey) });
         }
 
         const dayTrips = state.dayTrips
@@ -377,8 +401,15 @@
 
         const legs = await Promise.all(
           segments.map(async (seg) => {
-            const res = await window.RouteService.getLeg(seg.from, seg.to, seg.method);
-            if (seg.method === 'train') {
+            const fetching = seg.method === 'train' && seg.rail;
+            if (fetching) railLoading[seg.legKey] = true;
+            let res;
+            try {
+              res = await window.RouteService.getLeg(seg.from, seg.to, seg.method, { rail: seg.rail });
+            } finally {
+              if (fetching) delete railLoading[seg.legKey];
+            }
+            if (seg.method === 'train' && seg.rail) {
               // Record the resolved station for each endpoint (for the leg planner).
               stationByPlace[seg.from.id] = res.fromStation || null;
               stationByPlace[seg.to.id] = res.toStation || null;
@@ -494,6 +525,7 @@
         onDrop,
         onDragEnd,
         setLegMethod,
+        toggleRailLeg,
         editLeg,
         resolveSync,
         addVariant,
