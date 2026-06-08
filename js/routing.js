@@ -44,9 +44,14 @@
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OSRM ${res.status}`);
     const data = await res.json();
-    const coords = data.routes?.[0]?.geometry?.coordinates;
+    const route = data.routes && data.routes[0];
+    const coords = route && route.geometry && route.geometry.coordinates;
     if (!coords || !coords.length) throw new Error('No route geometry');
-    return coords.map(([lng, lat]) => [lat, lng]); // GeoJSON is [lng,lat]
+    return {
+      coords: coords.map(([lng, lat]) => [lat, lng]), // GeoJSON is [lng,lat]
+      distanceKm: route.distance != null ? route.distance / 1000 : null,
+      durationH: route.duration != null ? route.duration / 3600 : null,
+    };
   }
 
   /**
@@ -92,7 +97,8 @@
           ? { coords: [[from.lat, from.lng], ...rail, [to.lat, to.lng]], approximate: false, ...stations }
           : { coords: straight(from, to), approximate: true, ...stations };
       } else if (DRIVING_METHODS.has(method)) {
-        result = { coords: await drivingRoute(from, to), approximate: false };
+        const r = await drivingRoute(from, to);
+        result = { coords: r.coords, approximate: false, distanceKm: r.distanceKm, durationH: r.durationH };
       } else if (STRAIGHT_METHODS.has(method)) {
         result = { coords: straight(from, to), approximate: method !== 'flight' && method !== 'ferry' };
       } else {

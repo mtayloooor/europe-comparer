@@ -108,22 +108,25 @@
 
       legs.forEach((leg) => {
         if (leg.coords.length < 2) return;
+        // Visible line is purely cosmetic; a wide transparent hit-line handles
+        // hover. `.leg-hit` forces pointer-events on the stroke even though it's
+        // transparent (SVG default `visiblePainted` would otherwise ignore it).
         const line = L.polyline(leg.coords, {
           color: leg.color,
           weight: 4,
           opacity: 0.85,
           dashArray: leg.dashed ? '8,8' : null,
+          interactive: false,
         }).addTo(map);
-        if (leg.tooltip) line.bindTooltip(leg.tooltip, { sticky: true, direction: 'top' });
+        layers.push(line);
+
+        const hit = L.polyline(leg.coords, { color: '#000', weight: 18, opacity: 0, className: 'leg-hit' }).addTo(map);
+        if (leg.tooltip) hit.bindTooltip(leg.tooltip, { sticky: true, direction: 'top', opacity: 0.95 });
         if (onLegHover && leg.key) {
-          // A wide invisible hit-line makes the thin route easier to hover.
-          const hit = L.polyline(leg.coords, { color: '#000', weight: 16, opacity: 0 }).addTo(map);
-          if (leg.tooltip) hit.bindTooltip(leg.tooltip, { sticky: true, direction: 'top' });
           hit.on('mouseover', () => onLegHover(leg.key));
           hit.on('mouseout', () => onLegHover(null));
-          layers.push(hit);
         }
-        layers.push(line);
+        layers.push(hit);
       });
 
       markers.forEach((m) => {

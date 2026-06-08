@@ -65,3 +65,10 @@ select.num-input {
 .leaflet-control {
   z-index: 1 !important;
 }
+
+/* Transparent hover hit-area for map leg lines: force pointer events on the
+   stroke even though it isn't painted (default visiblePainted would ignore it). */
+.leg-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
