@@ -191,6 +191,81 @@
     let overlays = [];
     let lastFitKey = null;
 
+    // MapKit overlays don't emit hover events, so we hit-test manually: project
+    // each leg's (downsampled) coordinates to screen points on mousemove and
+    // find the nearest line, then show a custom tooltip + report the hover.
+    const el = document.getElementById(elementId);
+    let hoverLegs = []; // [{ key, tooltip, pts:[[lat,lng]...] }]
+    let hoverCb = null;
+    const tip = document.createElement('div');
+    tip.className = 'mapkit-leg-tip';
+    tip.style.cssText =
+      'position:fixed;z-index:1200;pointer-events:none;display:none;background:#fff;' +
+      'border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:12px;' +
+      'box-shadow:0 1px 6px rgba(0,0,0,.2);max-width:240px;color:#1e293b;';
+    document.body.appendChild(tip);
+
+    function distToSeg(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy || 1;
+      let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = ax + t * dx;
+      const cy = ay + t * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+    function hitTest(e) {
+      let best = null;
+      let bestD = Infinity;
+      for (const leg of hoverLegs) {
+        let prev = null;
+        for (const c of leg.pts) {
+          let pt = null;
+          try {
+            pt = map.convertCoordinateToPointOnPage(new mapkit.Coordinate(c[0], c[1]));
+          } catch (err) { pt = null; }
+          if (pt && prev) {
+            const d = distToSeg(e.pageX, e.pageY, prev.x, prev.y, pt.x, pt.y);
+            if (d < bestD) { bestD = d; best = leg; }
+          }
+          prev = pt;
+        }
+      }
+      if (best && bestD <= 12) {
+        tip.innerHTML = best.tooltip || '';
+        tip.style.left = e.clientX + 12 + 'px';
+        tip.style.top = e.clientY + 12 + 'px';
+        tip.style.display = 'block';
+        if (hoverCb) hoverCb(best.key);
+      } else {
+        tip.style.display = 'none';
+        if (hoverCb) hoverCb(null);
+      }
+    }
+    let hoverPending = false;
+    let lastMove = null;
+    const onMove = (e) => {
+      lastMove = e;
+      if (hoverPending) return;
+      hoverPending = true;
+      requestAnimationFrame(() => { hoverPending = false; if (lastMove) hitTest(lastMove); });
+    };
+    const onLeave = () => { tip.style.display = 'none'; if (hoverCb) hoverCb(null); };
+    if (el) {
+      el.addEventListener('mousemove', onMove);
+      el.addEventListener('mouseleave', onLeave);
+    }
+    // Downsample a coord list to at most `max` points (keeps hit-testing cheap).
+    function downsample(coords, max) {
+      if (coords.length <= max) return coords;
+      const step = Math.ceil(coords.length / max);
+      const out = [];
+      for (let i = 0; i < coords.length; i += step) out.push(coords[i]);
+      if (out[out.length - 1] !== coords[coords.length - 1]) out.push(coords[coords.length - 1]);
+      return out;
+    }
+
     function clear() {
       if (annotations.length) map.removeAnnotations(annotations);
       if (overlays.length) map.removeOverlays(overlays);
@@ -202,8 +277,12 @@
 
     const lerp = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
 
-    function render({ markers, legs, dayTrips, trails }) {
+    function render({ markers, legs, dayTrips, trails, onLegHover }) {
       clear();
+      hoverCb = onLegHover || null;
+      hoverLegs = legs
+        .filter((l) => l.coords.length >= 2 && l.key)
+        .map((l) => ({ key: l.key, tooltip: l.tooltip, pts: downsample(l.coords, 40) }));
 
       // Fading arrival/departure trails.
       (trails || []).forEach((t) => {
@@ -268,6 +347,11 @@
     }
 
     function destroy() {
+      if (el) {
+        el.removeEventListener('mousemove', onMove);
+        el.removeEventListener('mouseleave', onLeave);
+      }
+      if (tip.parentNode) tip.parentNode.removeChild(tip);
       try {
         map.destroy();
       } catch (e) {
