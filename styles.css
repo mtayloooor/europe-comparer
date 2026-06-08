@@ -1,0 +1,55 @@
+/* Custom styles layered on top of Tailwind (Play CDN). */
+
+[v-cloak] {
+  display: none;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* Shared input styling referenced from the markup. */
+.city-input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+}
+.city-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.num-input {
+  display: block;
+  width: 100%;
+  margin-top: 0.125rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+}
+.num-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Leaflet must have an explicit stacking context below the header/modals. */
+#map {
+  z-index: 0;
+}
+.leaflet-pane,
+.leaflet-control {
+  z-index: 1 !important;
+}
