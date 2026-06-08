@@ -364,5 +364,5 @@
     }
   }
 
-  window.RailRouter = { route, clearCache: () => cache.clear() };
+  window.RailRouter = { route, resolveStation, clearCache: () => cache.clear() };
 })();

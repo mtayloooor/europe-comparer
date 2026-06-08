@@ -96,7 +96,8 @@
         result = { coords: straight(from, to), approximate: true };
       }
     } catch (e) {
-      console.warn('Route lookup failed, using straight line:', e.message);
+      const D = window.DebugLog;
+      D && D.error(`Route lookup failed (${method}), using straight line: ${e.message}`);
       result = { coords: straight(from, to), approximate: true };
     }
 
