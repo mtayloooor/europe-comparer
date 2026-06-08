@@ -346,39 +346,67 @@
       function isEmpty(d) {
         return !d || (!d.cost && !d.duration);
       }
-      // Distance-based estimates: cost from per-method $/km (driving ≈ petrol
-      // use, train/bus ≈ typical fares), time from average speeds. See
-      // Models.ESTIMATE. Only fills empty fields.
-      function autofillAll() {
-        state.variants.forEach((v) => {
-          // Inbound/outbound flights have no on-map distance — assume a typical
-          // ~1500 km medium-haul hop.
-          if (isEmpty(v.flightIn)) Object.assign(v.flightIn, M.estimateLeg('flight', 1500));
-          if (isEmpty(v.flightOut)) Object.assign(v.flightOut, M.estimateLeg('flight', 1500));
+      // Estimate a leg using the *actual* route where we can: OSRM road
+      // distance + time for car/bus, fetched rail track length for train;
+      // otherwise straight-line distance × a method factor.
+      async function estimateRealLeg(a, b, method) {
+        if (a.lat == null || b.lat == null) return M.estimateLeg(method, 150); // no coords → neutral default
+        const straight = haversineKm([a.lat, a.lng], [b.lat, b.lng]);
+        if (method === 'car' || method === 'bus') {
+          try {
+            const res = await window.RouteService.getLeg(a, b, method, { rail: false });
+            if (res.distanceKm != null && res.durationH != null) {
+              const E = M.ESTIMATE[method];
+              const factor = method === 'bus' ? 1.25 : 1; // buses are slower + stop more
+              return {
+                cost: Math.round(E.base + res.distanceKm * E.rate),
+                duration: Math.round(res.durationH * factor * 4) / 4,
+              };
+            }
+          } catch (e) { /* fall through to straight estimate */ }
+          return M.estimateLeg(method, straight);
+        }
+        if (method === 'train') {
+          const rc = state.railCache[coordKey(a, b)];
+          if (rc && rc.coords && rc.coords.length > 1) {
+            const track = pathKm(rc.coords);
+            const E = M.ESTIMATE.train;
+            return { cost: Math.round(track * E.rate), duration: Math.round((track / E.kmh) * 4) / 4 };
+          }
+          return M.estimateLeg('train', straight);
+        }
+        return M.estimateLeg(method, straight); // flight / ferry
+      }
+
+      // Autofill estimates. `force` overwrites existing numbers too.
+      async function autofillAll(force) {
+        for (const v of state.variants) {
+          if (force || isEmpty(v.flightIn)) Object.assign(v.flightIn, M.estimateLeg('flight', 1500));
+          if (force || isEmpty(v.flightOut)) Object.assign(v.flightOut, M.estimateLeg('flight', 1500));
 
           const nodes = M.variantNodes(state, v);
           for (let i = 0; i < nodes.length - 1; i += 1) {
             const a = nodes[i];
             const b = nodes[i + 1];
-            if (a.lat == null || b.lat == null) continue;
             const method = (v.methods && v.methods[M.pairKey(a.id, b.id)]) || 'train';
             const mk = M.methodKey(a.id, b.id, method);
-            const override = v.overrides && v.overrides[mk];
-            if (isEmpty(state.legLibrary[mk]) && isEmpty(override)) {
-              const dist = haversineKm([a.lat, a.lng], [b.lat, b.lng]);
-              state.legLibrary[mk] = M.estimateLeg(method, dist);
-            }
+            const hasOverride = v.overrides && v.overrides[mk];
+            const current = hasOverride ? v.overrides[mk] : state.legLibrary[mk];
+            if (!force && !isEmpty(current)) continue;
+            const est = await estimateRealLeg(a, b, method);
+            if (hasOverride) v.overrides[mk] = est;
+            else state.legLibrary[mk] = est;
           }
-        });
+        }
 
         state.dayTrips.forEach((dt) => {
-          if (dt.cost && dt.duration) return;
+          if (!force && dt.cost && dt.duration) return;
           const parent = destById(dt.destinationId);
           const est = (dt.lat != null && parent && parent.lat != null)
             ? M.estimateLeg('car', haversineKm([dt.lat, dt.lng], [parent.lat, parent.lng])) // one-way, by car
             : { cost: 30, duration: 1.5 };
-          if (!dt.cost) dt.cost = est.cost;
-          if (!dt.duration) dt.duration = est.duration;
+          if (force || !dt.cost) dt.cost = est.cost;
+          if (force || !dt.duration) dt.duration = est.duration;
         });
       }
 
