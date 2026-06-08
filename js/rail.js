@@ -22,12 +22,32 @@
   const ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
   ];
   const MAX_LEG_KM = 500; // beyond this, corridor data gets too big — skip
-  const TIMEOUT_MS = 12000;
+  const TIMEOUT_MS = 18000;
   const MAX_NODES = 40000; // guard against pathological graph sizes
+  const MIN_GAP_MS = 1000; // Overpass fair-use: ~1 request/sec, globally
 
   const cache = new Map();
+
+  // ── Global request queue (serialise + space out Overpass calls) ───────
+  // Public Overpass instances rate-limit hard; firing many requests at once
+  // gets them refused (often surfacing as a CORS-less "Load failed"). We run
+  // at most one request at a time, spaced by MIN_GAP_MS.
+  let queueChain = Promise.resolve();
+  let lastRunAt = 0;
+  function enqueue(task) {
+    const run = async () => {
+      const gap = MIN_GAP_MS - (Date.now() - lastRunAt);
+      if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+      lastRunAt = Date.now();
+      return task();
+    };
+    const p = queueChain.then(run, run);
+    queueChain = p.then(() => {}, () => {});
+    return p;
+  }
 
   // ── Geometry helpers ─────────────────────────────────────────────────
   const R = 6371; // km
@@ -65,34 +85,41 @@
   }
 
   // ── Overpass fetch ───────────────────────────────────────────────────
-  // Shared Overpass POST with timeout + mirror fallback. Returns elements[] or null.
-  async function overpass(query) {
+  // One spaced-out POST to a single endpoint. Returns elements[] or null.
+  async function fetchOnce(url, query) {
     const D = window.DebugLog;
-    for (const url of ENDPOINTS) {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-      const started = Date.now();
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          body: 'data=' + encodeURIComponent(query),
-          signal: ctrl.signal,
-        });
-        clearTimeout(t);
-        if (!res.ok) {
-          D && D.warn(`Overpass HTTP ${res.status} from ${host(url)}`);
-          continue;
-        }
-        const data = await res.json();
-        const n = data && Array.isArray(data.elements) ? data.elements.length : 0;
-        D && D.info(`Overpass ${host(url)} → ${n} elements (${Date.now() - started}ms)`);
-        if (data && Array.isArray(data.elements)) return data.elements;
-      } catch (e) {
-        clearTimeout(t);
-        D && D.warn(`Overpass ${host(url)} failed: ${e.name === 'AbortError' ? 'timeout' : e.message}`);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!res.ok) {
+        D && D.warn(`Overpass HTTP ${res.status} from ${host(url)}`);
+        return null;
       }
+      const data = await res.json();
+      const n = data && Array.isArray(data.elements) ? data.elements.length : 0;
+      D && D.info(`Overpass ${host(url)} → ${n} elements (${Date.now() - started}ms)`);
+      return data && Array.isArray(data.elements) ? data.elements : null;
+    } catch (e) {
+      clearTimeout(t);
+      D && D.warn(`Overpass ${host(url)} failed: ${e.name === 'AbortError' ? 'timeout' : e.message || 'network'}`);
+      return null;
     }
-    D && D.error('Overpass: all endpoints failed');
+  }
+
+  // Shared Overpass call (queued + mirror fallback). Returns elements[] or null.
+  async function overpass(query) {
+    for (const url of ENDPOINTS) {
+      const elements = await enqueue(() => fetchOnce(url, query));
+      if (elements) return elements;
+    }
+    window.DebugLog && window.DebugLog.error('Overpass: all endpoints failed');
     return null;
   }
   function host(url) {
@@ -134,11 +161,22 @@
    *  - otherwise use the station nearest the city pin.
    * @returns {Promise<{name,lat,lng}|null>}
    */
+  const stationInflight = new Map();
   async function resolveStation(place) {
     if (!place || place.lat == null || place.lng == null) return null;
     const key = `${place.lat.toFixed(3)},${place.lng.toFixed(3)}|${norm(place.name)}`;
     if (stationCache.has(key)) return stationCache.get(key);
+    if (stationInflight.has(key)) return stationInflight.get(key);
+    const p = resolveStationImpl(place, key);
+    stationInflight.set(key, p);
+    try {
+      return await p;
+    } finally {
+      stationInflight.delete(key);
+    }
+  }
 
+  async function resolveStationImpl(place, key) {
     const query =
       `[out:json][timeout:25];` +
       `(node["railway"="station"](around:${STATION_RADIUS},${place.lat},${place.lng});` +
@@ -308,6 +346,7 @@
   }
 
   // ── Public entry ─────────────────────────────────────────────────────
+  const routeInflight = new Map();
   async function route(from, to) {
     if (
       !from || !to ||
@@ -325,7 +364,18 @@
 
     const key = `${from.lat.toFixed(3)},${from.lng.toFixed(3)}->${to.lat.toFixed(3)},${to.lng.toFixed(3)}`;
     if (cache.has(key)) return cache.get(key);
+    if (routeInflight.has(key)) return routeInflight.get(key);
+    const p = routeImpl(from, to, key, distKm);
+    routeInflight.set(key, p);
+    try {
+      return await p;
+    } finally {
+      routeInflight.delete(key);
+    }
+  }
 
+  async function routeImpl(from, to, key, distKm) {
+    const D = window.DebugLog;
     try {
       const widthKm = Math.min(35, Math.max(12, distKm * 0.12));
       D && D.info(`Rail route ${distKm.toFixed(0)}km, corridor ±${widthKm.toFixed(0)}km`);
