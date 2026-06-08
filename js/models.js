@@ -35,13 +35,13 @@
   const STORAGE_KEY = 'europe-comparator-state-v1';
   const SCHEMA_VERSION = 2;
 
-  // Travel methods with visual identity.
+  // Travel methods with visual identity. `lucide` is an Iconify icon name.
   const TRAVEL = {
-    flight: { label: 'Flight', icon: '✈️', color: '#0ea5e9' },
-    train: { label: 'Train', icon: '🚆', color: '#16a34a' },
-    bus: { label: 'Bus', icon: '🚌', color: '#f59e0b' },
-    car: { label: 'Car', icon: '🚗', color: '#ef4444' },
-    ferry: { label: 'Ferry', icon: '⛴️', color: '#8b5cf6' },
+    flight: { label: 'Flight', lucide: 'lucide:plane', color: '#0ea5e9' },
+    train: { label: 'Train', lucide: 'lucide:train-front', color: '#16a34a' },
+    bus: { label: 'Bus', lucide: 'lucide:bus', color: '#f59e0b' },
+    car: { label: 'Car', lucide: 'lucide:car', color: '#ef4444' },
+    ferry: { label: 'Ferry', lucide: 'lucide:ship', color: '#8b5cf6' },
   };
 
   // Mock-data ranges per travel type for the "Autofill Estimates" feature.
@@ -98,13 +98,20 @@
 
   // Endpoints & flights now live ON the variant (they may differ per variant).
   // `endpoints` (optional) seeds origin/destination/flightIn/flightOut.
+  // Clone a place but give it a fresh id, so each variant's endpoints have
+  // their own identity (editing one variant's endpoint can't collide with
+  // another's leg keys).
+  function clonePlaceFreshId(p) {
+    return p ? Object.assign(clone(p), { id: uid('p') }) : place('');
+  }
+
   function variant(name, order, endpoints) {
     const ep = endpoints || {};
     return {
       id: uid('v'),
       name,
-      origin: ep.origin ? clone(ep.origin) : place(''),
-      destination: ep.destination ? clone(ep.destination) : place(''),
+      origin: clonePlaceFreshId(ep.origin),
+      destination: clonePlaceFreshId(ep.destination),
       flightIn: ep.flightIn ? clone(ep.flightIn) : emptyFlight(),
       flightOut: ep.flightOut ? clone(ep.flightOut) : emptyFlight(),
       order: order.slice(),
@@ -209,22 +216,39 @@
     return { cost: 0, duration: 0 };
   }
 
-  // Build the ordered list of inter-destination legs for a variant.
+  // The ordered place nodes a variant travels through:
+  // arrival endpoint (Origin) → key destinations (in order) → departure
+  // endpoint (Final). Endpoints are the cities flown into / out of.
+  function variantNodes(state, vrt) {
+    const mid = vrt.order
+      .map((id) => state.destinations.find((d) => d.id === id))
+      .filter(Boolean);
+    return [vrt.origin, ...mid, vrt.destination];
+  }
+
+  // Build the ordered list of travel legs for a variant. This now spans the
+  // whole journey: Origin → first destination, the inter-destination legs, and
+  // last destination → Final. Each leg has its own method/cost/time.
   function variantLegs(state, vrt) {
+    const nodes = variantNodes(state, vrt);
     const legs = [];
-    for (let i = 0; i < vrt.order.length - 1; i += 1) {
-      const fromId = vrt.order[i];
-      const toId = vrt.order[i + 1];
-      const method = (vrt.methods && vrt.methods[pairKey(fromId, toId)]) || 'train';
-      const data = getLegData(state, vrt, fromId, toId, method);
+    for (let i = 0; i < nodes.length - 1; i += 1) {
+      const from = nodes[i];
+      const to = nodes[i + 1];
+      const method = (vrt.methods && vrt.methods[pairKey(from.id, to.id)]) || 'train';
+      const data = getLegData(state, vrt, from.id, to.id, method);
       legs.push({
-        key: pairKey(fromId, toId),
-        mk: methodKey(fromId, toId, method),
-        fromId,
-        toId,
+        key: pairKey(from.id, to.id),
+        mk: methodKey(from.id, to.id, method),
+        fromId: from.id,
+        toId: to.id,
+        fromName: from.name || 'Unnamed',
+        toName: to.name || 'Unnamed',
         method,
         cost: data.cost || 0,
         duration: data.duration || 0,
+        // 'origin' = arrival→first stop, 'final' = last stop→departure, else 'mid'
+        kind: i === 0 ? 'origin' : i === nodes.length - 2 ? 'final' : 'mid',
       });
     }
     return legs;
@@ -279,6 +303,7 @@
     DEST_COLORS,
     uid,
     clone,
+    clonePlaceFreshId,
     place,
     destination,
     dayTrip,
@@ -291,6 +316,7 @@
     save,
     load,
     getLegData,
+    variantNodes,
     variantLegs,
     dayTripCost,
     dayTripTime,

@@ -26,6 +26,7 @@
         active: -1,
         timer: null,
         seq: 0,
+        flipUp: false, // open the dropdown above the field when space below is tight
         // Name the current coordinates correspond to (assume existing ones valid).
         resolvedName: this.place.name || '',
       };
@@ -35,6 +36,14 @@
         this.place.name = e.target.value;
         this.schedule(e.target.value);
       },
+      // Decide whether the results panel should drop down or flip up.
+      recalcFlip() {
+        const rect = this.$el && this.$el.getBoundingClientRect();
+        if (!rect) return;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const PANEL = 248; // ≈ max-h-60 (240px) + margin
+        this.flipUp = spaceBelow < PANEL && rect.top > spaceBelow;
+      },
       schedule(q) {
         clearTimeout(this.timer);
         if (!q || q.trim().length < 2) {
@@ -42,6 +51,7 @@
           this.open = false;
           return;
         }
+        this.recalcFlip();
         this.open = true;
         this.loading = true;
         this.timer = setTimeout(() => this.run(q.trim()), 280); // debounce
@@ -53,6 +63,7 @@
         this.results = res;
         this.loading = false;
         this.active = -1;
+        this.recalcFlip();
       },
       choose(r) {
         this.place.name = r.name;
@@ -63,7 +74,10 @@
         this.open = false;
       },
       onFocus() {
-        if (this.results.length) this.open = true;
+        if (this.results.length) {
+          this.recalcFlip();
+          this.open = true;
+        }
       },
       async onBlur() {
         // Let a result mousedown register first.
@@ -106,8 +120,12 @@
           :placeholder="placeholder"
           autocomplete="off" />
         <span v-if="place.lat==null && place.name"
-              class="absolute right-2 top-1.5 text-[11px] text-amber-500" title="No map location yet — pick a result">⚠</span>
-        <div v-if="open" class="absolute z-[1500] left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+              class="absolute right-2 top-1.5 text-amber-500" title="No map location yet — pick a result">
+          <app-icon name="lucide:triangle-alert" :size="13" />
+        </span>
+        <div v-if="open"
+             class="absolute z-[1500] left-0 right-0 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-auto text-sm"
+             :class="flipUp ? 'bottom-full mb-1' : 'top-full mt-1'">
           <div v-if="loading" class="px-3 py-2 text-slate-400 text-xs">Searching…</div>
           <template v-else>
             <button v-for="(r, i) in results" :key="i"

@@ -116,8 +116,8 @@
         const src = state.variants.find((v) => v.id === srcId);
         const v = activeVariant.value;
         if (!src || !v) return;
-        v.origin = M.clone(src.origin);
-        v.destination = M.clone(src.destination);
+        v.origin = M.clonePlaceFreshId(src.origin);
+        v.destination = M.clonePlaceFreshId(src.destination);
         v.flightIn = M.clone(src.flightIn);
         v.flightOut = M.clone(src.flightOut);
         copySource.value = '';
@@ -133,11 +133,27 @@
       }
 
       // ── Variant legs (order / method / estimates) ──────────────────
-      function moveDest(idx, dir) {
+      // Drag-and-drop reordering of the key destinations.
+      const dragIndex = ref(null);
+      const dragOverIndex = ref(null);
+      function onDragStart(idx) {
+        dragIndex.value = idx;
+      }
+      function onDragEnter(idx) {
+        if (dragIndex.value !== null) dragOverIndex.value = idx;
+      }
+      function onDrop(idx) {
+        const from = dragIndex.value;
+        dragOverIndex.value = null;
+        dragIndex.value = null;
+        if (from === null || from === idx) return;
         const arr = activeVariant.value.order;
-        const j = idx + dir;
-        if (j < 0 || j >= arr.length) return;
-        [arr[idx], arr[j]] = [arr[j], arr[idx]];
+        const [moved] = arr.splice(from, 1);
+        arr.splice(idx, 0, moved);
+      }
+      function onDragEnd() {
+        dragIndex.value = null;
+        dragOverIndex.value = null;
       }
       function setLegMethod(leg, method) {
         activeVariant.value.methods[leg.key] = method;
@@ -185,8 +201,31 @@
         if (!activeVariant.value) return;
         const src = activeVariant.value;
         const copy = M.variant(`${src.name} (copy)`, src.order, src);
-        copy.methods = M.clone(src.methods);
-        copy.overrides = M.clone(src.overrides || {});
+        // The copy got fresh endpoint ids; remap any leg keys that reference the
+        // source endpoints so the duplicate keeps its endpoint-leg config.
+        const idMap = {
+          [src.origin.id]: copy.origin.id,
+          [src.destination.id]: copy.destination.id,
+        };
+        const remap = (key, isMethodKey) => {
+          let pk = key;
+          let suffix = '';
+          if (isMethodKey) {
+            const i = key.indexOf('::');
+            pk = key.slice(0, i);
+            suffix = key.slice(i);
+          }
+          const parts = pk.split('-').map((id) => idMap[id] || id).sort();
+          return parts.join('-') + suffix;
+        };
+        copy.methods = {};
+        Object.keys(src.methods || {}).forEach((k) => {
+          copy.methods[remap(k, false)] = src.methods[k];
+        });
+        copy.overrides = {};
+        Object.keys(src.overrides || {}).forEach((k) => {
+          copy.overrides[remap(k, true)] = M.clone(src.overrides[k]);
+        });
         copy.extraCosts = M.clone(src.extraCosts || []).map((c) => ({ ...c, id: M.uid('ec') }));
         state.variants.push(copy);
         state.activeVariantId = copy.id;
@@ -281,19 +320,15 @@
           { lat: v.destination.lat, lng: v.destination.lng, label: 'B', color: '#1e293b', name: v.destination.name || 'Destination' },
         ];
 
-        // Ordered node sequence with the travel method for each segment.
+        // Every segment is now a leg with its own method (the external flights
+        // into/out of the endpoints have no geometry on this map).
         const seq = [v.origin, ...stops, v.destination];
         const segments = [];
         for (let i = 0; i < seq.length - 1; i += 1) {
-          let method;
-          if (i === 0 || i === seq.length - 2) {
-            method = 'flight'; // inbound / outbound flights
-          } else {
-            const fromId = v.order[i - 1];
-            const toId = v.order[i];
-            method = (v.methods && v.methods[M.pairKey(fromId, toId)]) || 'train';
-          }
-          segments.push({ from: seq[i], to: seq[i + 1], method });
+          const from = seq[i];
+          const to = seq[i + 1];
+          const method = (v.methods && v.methods[M.pairKey(from.id, to.id)]) || 'train';
+          segments.push({ from, to, method });
         }
 
         const dayTrips = state.dayTrips
@@ -415,7 +450,12 @@
         copyEndpointsFrom,
         addExtraCost,
         removeExtraCost,
-        moveDest,
+        dragIndex,
+        dragOverIndex,
+        onDragStart,
+        onDragEnter,
+        onDrop,
+        onDragEnd,
         setLegMethod,
         editLeg,
         resolveSync,
@@ -432,6 +472,18 @@
         changeToken,
       };
     },
+  });
+
+  // Treat the Iconify web component as a native custom element so Vue doesn't
+  // try to resolve it as a Vue component (it renders its own shadow DOM).
+  app.config.compilerOptions.isCustomElement = (tag) => tag === 'iconify-icon';
+
+  // Tiny wrapper to keep icon markup terse and consistently sized. Colour is
+  // inherited via currentColor, so Tailwind text-* classes on the parent work.
+  app.component('app-icon', {
+    props: { name: { type: String, required: true }, size: { type: [String, Number], default: 16 } },
+    template:
+      '<iconify-icon :icon="name" :width="size" :height="size" style="vertical-align:-0.15em"></iconify-icon>',
   });
 
   app.component('place-search', window.PlaceSearchComponent);
