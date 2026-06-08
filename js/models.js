@@ -44,7 +44,27 @@
     ferry: { label: 'Ferry', lucide: 'lucide:ship', color: '#8b5cf6' },
   };
 
-  // Mock-data ranges per travel type for the "Autofill Estimates" feature.
+  // Rough but real cost/time estimates per method, from leg distance.
+  //  rate  $/km on adjusted distance   kmh  average speed
+  //  base  fixed $ (e.g. flight)       overheadH  fixed hours (airport, port)
+  //  detour  straight→actual distance multiplier
+  const ESTIMATE = {
+    car: { rate: 0.13, kmh: 90, base: 0, overheadH: 0, detour: 1.3, note: 'petrol ≈7 L/100 km @ ~$1.85/L' },
+    bus: { rate: 0.1, kmh: 65, base: 0, overheadH: 0, detour: 1.3, note: 'coach fare ≈$0.10/km' },
+    train: { rate: 0.18, kmh: 110, base: 0, overheadH: 0, detour: 1.2, note: 'rail fare ≈$0.18/km' },
+    flight: { rate: 0.1, kmh: 700, base: 40, overheadH: 2, detour: 1.0, note: 'base $40 + $0.10/km, +2 h airport' },
+    ferry: { rate: 0.15, kmh: 35, base: 20, overheadH: 0.5, detour: 1.0, note: 'base $20 + $0.15/km' },
+  };
+
+  function estimateLeg(method, distKm) {
+    const e = ESTIMATE[method] || ESTIMATE.train;
+    const d = (distKm || 0) * e.detour;
+    return {
+      cost: Math.round(e.base + d * e.rate),
+      duration: Math.round((e.overheadH + d / e.kmh) * 4) / 4, // nearest quarter hour
+    };
+  }
+
   // [costMin, costMax, hoursMin, hoursMax]
   const MOCK_RANGES = {
     flight: [60, 220, 1.5, 4],
@@ -119,6 +139,8 @@
       overrides: {},
       extraCosts: [], // [{ id, label, amount }] — variant-specific costs (e.g. car hire)
       railEnabled: {}, // { [legKey]: true } — train legs the user has fetched rail detail for
+      trailAngleIn: null, // override bearing (deg) for the arrival trail; null = auto
+      trailAngleOut: null, // override bearing (deg) for the departure trail; null = auto
     };
   }
 
@@ -157,6 +179,7 @@
       mapProvider: 'leaflet', // 'leaflet' (OSM) | 'mapkit' (Apple Maps)
       mapkitToken: '',
       travelColors: {}, // per-method colour overrides, e.g. { train: '#0a0' }
+      railCache: {}, // persisted fetched rail geometry, keyed by leg coords
     };
   }
 
@@ -178,6 +201,8 @@
         if (!v.flightOut) v.flightOut = clone(g.flightOut) || emptyFlight();
         if (!Array.isArray(v.extraCosts)) v.extraCosts = [];
         if (!v.railEnabled) v.railEnabled = {};
+        if (v.trailAngleIn === undefined) v.trailAngleIn = null;
+        if (v.trailAngleOut === undefined) v.trailAngleOut = null;
       });
       delete state.origin;
       delete state.destination;
@@ -188,6 +213,7 @@
     if (state.mapProvider == null) state.mapProvider = 'leaflet';
     if (state.mapkitToken == null) state.mapkitToken = '';
     if (!state.travelColors) state.travelColors = {};
+    if (!state.railCache) state.railCache = {};
     return state;
   }
 
@@ -326,5 +352,7 @@
     dayTripTime,
     variantTotals,
     mockFor,
+    ESTIMATE,
+    estimateLeg,
   };
 })();

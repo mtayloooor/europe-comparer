@@ -16,12 +16,7 @@
       if (!state.variants.find((v) => v.id === state.activeVariantId)) {
         state.activeVariantId = state.variants[0] ? state.variants[0].id : null;
       }
-
-      // Rail detail is opt-in per session: never auto-fetch on load. The user
-      // re-enables specific train legs via the train icon.
-      state.variants.forEach((v) => {
-        v.railEnabled = {};
-      });
+      if (!state.railCache) state.railCache = {};
 
       const editingVariantId = ref(null);
       const syncPrompt = ref(null); // { mk, label, others, newData }
@@ -116,6 +111,9 @@
       const stationByPlace = reactive({});
       // Leg keys currently fetching rail detail (for the per-leg button spinner).
       const railLoading = reactive({});
+      // Leg keys that should force a fresh API fetch (set on an off→on toggle).
+      // In-memory only, so a reload uses the persisted railCache instead.
+      const railForce = {};
 
       function railEnabledFor(v, legKey) {
         return !!(v && v.railEnabled && v.railEnabled[legKey]);
@@ -126,9 +124,19 @@
         if (!v.railEnabled) v.railEnabled = {};
         if (v.railEnabled[leg.key]) {
           delete v.railEnabled[leg.key];
+          delete railForce[leg.key];
         } else {
           v.railEnabled[leg.key] = true;
+          railForce[leg.key] = true; // re-enabling reloads from the API
         }
+      }
+
+      const coordKey = (a, b) =>
+        `${(a.lat || 0).toFixed(4)},${(a.lng || 0).toFixed(4)}>${(b.lat || 0).toFixed(4)},${(b.lng || 0).toFixed(4)}`;
+      function setRailCache(k, val) {
+        state.railCache[k] = val;
+        const keys = Object.keys(state.railCache);
+        if (keys.length > 60) delete state.railCache[keys[0]]; // simple cap
       }
 
       const activeLegs = computed(() => {
@@ -338,21 +346,39 @@
       function isEmpty(d) {
         return !d || (!d.cost && !d.duration);
       }
+      // Distance-based estimates: cost from per-method $/km (driving ≈ petrol
+      // use, train/bus ≈ typical fares), time from average speeds. See
+      // Models.ESTIMATE. Only fills empty fields.
       function autofillAll() {
         state.variants.forEach((v) => {
-          if (isEmpty(v.flightIn)) Object.assign(v.flightIn, M.mockFor('flight'));
-          if (isEmpty(v.flightOut)) Object.assign(v.flightOut, M.mockFor('flight'));
-          M.variantLegs(state, v).forEach((leg) => {
-            const existing = state.legLibrary[leg.mk];
-            const override = v.overrides && v.overrides[leg.mk];
-            if (isEmpty(existing) && isEmpty(override)) {
-              state.legLibrary[leg.mk] = M.mockFor(leg.method);
+          // Inbound/outbound flights have no on-map distance — assume a typical
+          // ~1500 km medium-haul hop.
+          if (isEmpty(v.flightIn)) Object.assign(v.flightIn, M.estimateLeg('flight', 1500));
+          if (isEmpty(v.flightOut)) Object.assign(v.flightOut, M.estimateLeg('flight', 1500));
+
+          const nodes = M.variantNodes(state, v);
+          for (let i = 0; i < nodes.length - 1; i += 1) {
+            const a = nodes[i];
+            const b = nodes[i + 1];
+            if (a.lat == null || b.lat == null) continue;
+            const method = (v.methods && v.methods[M.pairKey(a.id, b.id)]) || 'train';
+            const mk = M.methodKey(a.id, b.id, method);
+            const override = v.overrides && v.overrides[mk];
+            if (isEmpty(state.legLibrary[mk]) && isEmpty(override)) {
+              const dist = haversineKm([a.lat, a.lng], [b.lat, b.lng]);
+              state.legLibrary[mk] = M.estimateLeg(method, dist);
             }
-          });
+          }
         });
+
         state.dayTrips.forEach((dt) => {
-          if (!dt.cost) dt.cost = Math.round(20 + Math.random() * 80);
-          if (!dt.duration) dt.duration = Math.round((1 + Math.random() * 3) * 4) / 4;
+          if (dt.cost && dt.duration) return;
+          const parent = destById(dt.destinationId);
+          const est = (dt.lat != null && parent && parent.lat != null)
+            ? M.estimateLeg('car', haversineKm([dt.lat, dt.lng], [parent.lat, parent.lng])) // one-way, by car
+            : { cost: 30, duration: 1.5 };
+          if (!dt.cost) dt.cost = est.cost;
+          if (!dt.duration) dt.duration = est.duration;
         });
       }
 
@@ -442,8 +468,8 @@
         const trails = [];
         const withCoords = seq.filter((p) => p.lat != null);
         if (withCoords.length >= 2) {
-          trails.push(makeTrail(withCoords[0], withCoords[1], 'in'));
-          trails.push(makeTrail(withCoords[withCoords.length - 1], withCoords[withCoords.length - 2], 'out'));
+          trails.push(makeTrail(withCoords[0], withCoords[1], 'in', v.trailAngleIn));
+          trails.push(makeTrail(withCoords[withCoords.length - 1], withCoords[withCoords.length - 2], 'out', v.trailAngleOut));
         }
 
         return { markers, segments, dayTrips, trails };
@@ -451,8 +477,12 @@
 
       // Build a short trail anchored at a city, extending ~90km to the far side
       // away from its neighbour (so it reads as arriving from / leaving to beyond).
-      function makeTrail(city, neighbour, dir) {
-        const brg = bearing(neighbour.lat, neighbour.lng, city.lat, city.lng); // neighbour → city, continued
+      function makeTrail(city, neighbour, dir, angleOverride) {
+        // Auto: continue the bearing from the neighbour through the city (so the
+        // trail reads as coming from / going to beyond). Override: user-set angle.
+        const brg = angleOverride == null
+          ? bearing(neighbour.lat, neighbour.lng, city.lat, city.lng)
+          : angleOverride;
         const far = project(city.lat, city.lng, brg, 90);
         const cityPt = [city.lat, city.lng];
         return {
@@ -498,11 +528,18 @@
         const onLegHover = (key) => { hoveredLegKey.value = key; };
         const draw = (legs) => mapCtl.render({ markers, legs, dayTrips, trails, onLegHover });
 
-        // Phase 1 — draw immediately using the best geometry we already have
-        // (cached route if available, otherwise a quick straight line).
+        // Phase 1 — draw immediately. Prefer persisted rail geometry, then any
+        // in-session route geometry, otherwise a quick straight line.
         const legs = segments.map((seg) => {
-          const gk = `${seg.legKey}:${seg.method}:${seg.rail ? 1 : 0}`;
-          const cached = lastGeom[gk];
+          if (seg.method === 'train' && seg.rail) {
+            const rc = state.railCache[coordKey(seg.from, seg.to)];
+            if (rc) {
+              stationByPlace[seg.from.id] = rc.fromStation || null;
+              stationByPlace[seg.to.id] = rc.toStation || null;
+              return legView(seg, rc.coords, false);
+            }
+          }
+          const cached = lastGeom[`${seg.legKey}:${seg.method}`];
           return cached
             ? legView(seg, cached.coords, cached.dashed)
             : legView(seg, straightCoords(seg), true);
@@ -512,21 +549,34 @@
         // Phase 2 — resolve real geometry per leg and upgrade it in place.
         await Promise.all(
           segments.map(async (seg, idx) => {
-            const fetching = seg.method === 'train' && seg.rail;
-            if (fetching) railLoading[seg.legKey] = true;
-            let res;
-            try {
-              res = await window.RouteService.getLeg(seg.from, seg.to, seg.method, { rail: seg.rail });
-            } finally {
-              if (fetching) delete railLoading[seg.legKey];
-            }
-            if (token !== renderSeq) return; // superseded by a newer render
+            // ── Train legs with rail detail requested ──
             if (seg.method === 'train' && seg.rail) {
+              const ck = coordKey(seg.from, seg.to);
+              const forced = !!railForce[seg.legKey];
+              // Use persisted cache (and never auto-fetch on load): only hit the
+              // API when the user just toggled this leg on (forced).
+              if (!forced) return;
+              railLoading[seg.legKey] = true;
+              let res;
+              try {
+                res = await window.RouteService.getLeg(seg.from, seg.to, 'train', { rail: true, force: true });
+              } finally {
+                delete railLoading[seg.legKey];
+              }
+              delete railForce[seg.legKey];
+              if (token !== renderSeq) return;
               stationByPlace[seg.from.id] = res.fromStation || null;
               stationByPlace[seg.to.id] = res.toStation || null;
+              setRailCache(ck, { coords: res.coords, fromStation: res.fromStation || null, toStation: res.toStation || null });
+              legs[idx] = legView(seg, res.coords, res.approximate);
+              draw(legs);
+              return;
             }
+            // ── Everything else (car/bus routed, flight/ferry/train straight) ──
+            const res = await window.RouteService.getLeg(seg.from, seg.to, seg.method, { rail: false });
+            if (token !== renderSeq) return;
             const dashed = res.approximate || seg.method === 'flight' || seg.method === 'ferry';
-            lastGeom[`${seg.legKey}:${seg.method}:${seg.rail ? 1 : 0}`] = { coords: res.coords, dashed };
+            lastGeom[`${seg.legKey}:${seg.method}`] = { coords: res.coords, dashed };
             legs[idx] = legView(seg, res.coords, res.approximate);
             draw(legs); // progressive: redraw as each leg upgrades
           })
@@ -608,7 +658,7 @@
         hoveredLegKey,
         colorOf,
         setColor,
-        MOCK_RANGES: M.MOCK_RANGES,
+        ESTIMATE: M.ESTIMATE,
         debugEntries,
         showDebug,
         clearDebug,
@@ -672,5 +722,6 @@
   });
 
   app.component('place-search', window.PlaceSearchComponent);
+  app.component('angle-dial', window.AngleDialComponent);
   app.mount('#app');
 })();

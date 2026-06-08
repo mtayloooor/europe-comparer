@@ -9,7 +9,12 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      theme: { extend: { colors: { brand: { DEFAULT: '#4f46e5', dark: '#4338ca' } } } },
+      theme: {
+        extend: {
+          colors: { brand: { DEFAULT: '#4f46e5', dark: '#4338ca' } },
+          borderRadius: { xl: '1.75rem' },
+        },
+      },
     };
   </script>
 
@@ -218,6 +223,16 @@
                   </label>
                 </div>
               </div>
+            </div>
+
+            <!-- Trailing-gradient angle dials for the endpoints -->
+            <div class="flex items-center gap-4 pt-1 border-t border-slate-100">
+              <span class="text-[11px] text-slate-500">Trail angle</span>
+              <angle-dial :model-value="activeVariant.trailAngleIn"
+                          @update:model-value="activeVariant.trailAngleIn = $event" label="Arrival"></angle-dial>
+              <angle-dial :model-value="activeVariant.trailAngleOut"
+                          @update:model-value="activeVariant.trailAngleOut = $event" label="Departure"></angle-dial>
+              <span class="text-[10px] text-slate-400 flex-1">Aim the fading trails into/out of the endpoints. Double-click a dial for auto.</span>
             </div>
           </section>
 
@@ -428,27 +443,28 @@
             <app-icon name="lucide:x" :size="18"></app-icon></button>
         </div>
         <p class="text-sm text-slate-600">
-          Autofill drops in <b>realistic mock estimates</b> so you can see the comparison engine work without
-          typing everything. It only fills <b>empty</b> fields — your own numbers are never overwritten.
+          Autofill computes a rough <b>cost &amp; time estimate</b> for each leg from the <b>distance</b> between
+          its endpoints and the travel method. It only fills <b>empty</b> fields — your own numbers are never overwritten.
         </p>
         <ul class="text-sm text-slate-600 list-disc pl-5 space-y-1">
-          <li>Each inter-city leg and the in/out flights get a random cost &amp; time, picked from a range that depends on the travel method (below).</li>
-          <li>Day trips get a small random cost (≈ $20–100) and time (≈ 1–4 h).</li>
-          <li>Identical legs shared across variants stay in sync via the shared leg library.</li>
+          <li><b>Cost</b> = a per-km rate × distance (driving ≈ petrol use; train/bus/ferry ≈ typical fares; flights add a base fare).</li>
+          <li><b>Time</b> = distance ÷ a typical average speed for the method (flights add ~2 h for airport time).</li>
+          <li>Day trips are estimated by car for the one-way hop to the spot (then doubled for the round trip).</li>
         </ul>
         <div class="rounded-lg border border-slate-200 overflow-hidden text-sm">
           <div class="grid grid-cols-3 bg-slate-50 text-[11px] font-semibold text-slate-500 px-3 py-1.5">
-            <span>Method</span><span>Cost range</span><span>Time range</span>
+            <span>Method</span><span>Cost</span><span>Avg speed</span>
           </div>
           <div v-for="(t,k) in TRAVEL" :key="k" class="grid grid-cols-3 px-3 py-1.5 border-t border-slate-100 items-center">
             <span class="inline-flex items-center gap-1.5">
               <app-icon :name="t.lucide" :size="14" :style="{ color: colorOf(k) }"></app-icon> {{ t.label }}</span>
-            <span>${{ MOCK_RANGES[k][0] }}–${{ MOCK_RANGES[k][1] }}</span>
-            <span>{{ MOCK_RANGES[k][2] }}–{{ MOCK_RANGES[k][3] }} h</span>
+            <span>{{ ESTIMATE[k].base ? '$' + ESTIMATE[k].base + ' + ' : '~' }}${{ ESTIMATE[k].rate }}/km</span>
+            <span>{{ ESTIMATE[k].kmh }} km/h</span>
           </div>
         </div>
         <p class="text-[11px] text-slate-400">
-          These are placeholder figures for prototyping — replace any leg with a real quote by typing in its Cost/Time fields.
+          Train/bus/ferry fares vary a lot by operator and how early you book — treat these as ballpark “~”
+          figures and replace any leg with a real quote by typing in its Cost/Time fields.
         </p>
         <div class="flex justify-end pt-1">
           <button @click="showAutofillHelp = false" class="px-3 py-1.5 rounded-md bg-brand text-white hover:bg-brand-dark text-sm">Got it</button>
@@ -481,6 +497,7 @@
   <script src="./js/routing.js"></script>
   <script src="./js/map.js"></script>
   <script src="./js/place-search.js"></script>
+  <script src="./js/angle-dial.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>
