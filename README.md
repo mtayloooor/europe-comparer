@@ -42,14 +42,19 @@ field has text but no resolved map location yet. See `js/geocode.js` /
   if you enter the full loop cost/time yourself). Collapsible.
 
 ### Per-variant configuration
-- **Endpoints & Flights** — Origin (A) / Final Destination (B) plus editable
-  flight **cost + time** into and out of the trip. These live on the variant, so
-  they can differ between itineraries. A **"Copy from…"** dropdown clones another
-  variant's endpoints/flights in one click.
-- **Legs & route order** — reorder key destinations (▲ / ▼) and pick a travel
-  **method** per leg (Flight ✈️, Train 🚆, Bus 🚌, Car 🚗, Ferry ⛴️).
+- **Endpoints & Flights** — the cities you **fly into** (arrival) and **out of**
+  (departure), plus the editable **cost + time** of those inbound/outbound
+  flights. Endpoints live on the variant, so they can differ between itineraries.
+  A **"Copy from…"** dropdown clones another variant's endpoints/flights in one
+  click. The inbound/outbound flights are cost/time only — they aren't drawn on
+  the map (the home location is outside it).
 - **Variant costs** — arbitrary named line items unique to a variant (e.g. car
   hire, rail pass), added to that variant's total only.
+- **Legs & route order** — the journey is a chain of legs: **arrival city → first
+  destination → … → last destination → departure city**. Travel from an endpoint
+  to the nearest destination is a full leg with its own method/cost/time, just
+  like the inter-destination legs. Reorder the key destinations by **dragging the
+  handle**, and pick a travel **method** per leg (Flight, Train, Bus, Car, Ferry).
 
 ### Comparison engine
 - Create / duplicate / rename multiple variants via the tabs.
@@ -94,6 +99,15 @@ periodically.
   empty leg, flight, or day trip.
 - State persists to `localStorage` on every change, plus JSON **Export/Import**.
 
+## Icons
+
+UI icons use the free [Lucide](https://lucide.dev) set via the
+[Iconify](https://iconify.design) web component (`<iconify-icon icon="lucide:…">`),
+registered as a Vue custom element and wrapped by a small `<app-icon>` helper.
+Icons are fetched on demand from the Iconify CDN and cached; they can be bundled
+for fully offline use later. A few emoji are intentionally kept in the
+**Variant Comparison Dashboard** (📊 / 💰 cheapest / ⚡ fastest).
+
 ## Transit (Train / public-transport) routing
 
 True rail/PT route geometry isn't available from a free API, and **Apple MapKit
@@ -113,11 +127,11 @@ transit provider — assign an async function to `RouteService.transitProvider`
 ## Project structure
 
 ```
-index.html      markup + CDN deps (Tailwind, Vue 3, Leaflet, MapKit JS)
+index.html      markup + CDN deps (Tailwind, Vue 3, Leaflet, MapKit JS, Iconify)
 styles.css      small custom styles on top of Tailwind
 js/cities.js    built-in European city gazetteer (offline geocode fallback)
 js/geocode.js   GeoSearch: place search / geocoding via Photon (+ gazetteer fallback)
-js/place-search.js  <place-search> Vue autocomplete component
+js/place-search.js  <place-search> Vue autocomplete component (auto-flips up near the bottom)
 js/models.js    data models, factories, leg helpers, totals, persistence, migration
 js/routing.js   RouteService: per-method leg geometry (OSRM driving / straight / transit hook)
 js/map.js       MapController: Leaflet adapter + Apple MapKit JS adapter

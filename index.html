@@ -20,6 +20,9 @@
   <!-- Apple MapKit JS (renders once a token is supplied in-app) -->
   <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"></script>
 
+  <!-- Iconify (free Lucide icon set via web component — no build step) -->
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+
   <!-- Vue 3 global build (includes template compiler — no build step needed) -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 
@@ -31,7 +34,7 @@
     <header class="bg-white border-b border-slate-200 sticky top-0 z-[1000]">
       <div class="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2">
-          <span class="text-2xl">🧭</span>
+          <app-icon name="lucide:compass" :size="26" class="text-brand" />
           <div>
             <h1 class="text-lg font-bold leading-tight">Europe Trip Comparator</h1>
             <p class="text-xs text-slate-500 leading-tight">Compare itinerary variants by cost &amp; time</p>
@@ -41,25 +44,31 @@
           <!-- Map provider toggle -->
           <div class="flex rounded-md overflow-hidden border border-slate-300">
             <button @click="setMapProvider('leaflet')"
-                    class="px-2.5 py-1.5 font-medium"
-                    :class="state.mapProvider==='leaflet' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">🗺️ OSM</button>
+                    class="px-2.5 py-1.5 font-medium inline-flex items-center gap-1"
+                    :class="state.mapProvider==='leaflet' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">
+              <app-icon name="lucide:map" :size="15" /> OSM</button>
             <button @click="setMapProvider('mapkit')"
-                    class="px-2.5 py-1.5 font-medium border-l border-slate-300"
-                    :class="state.mapProvider==='mapkit' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">🍎 Apple</button>
+                    class="px-2.5 py-1.5 font-medium border-l border-slate-300 inline-flex items-center gap-1"
+                    :class="state.mapProvider==='mapkit' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">
+              <app-icon name="lucide:map-pinned" :size="15" /> Apple</button>
           </div>
           <button v-if="state.mapProvider==='mapkit'" @click="changeToken"
-                  class="px-2 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300" title="Set/replace MapKit token">🔑</button>
+                  class="px-2 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 inline-flex items-center" title="Set/replace MapKit token">
+            <app-icon name="lucide:key-round" :size="15" /></button>
 
           <button @click="autofillAll"
-                  class="px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium">✨ Autofill</button>
+                  class="px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium inline-flex items-center gap-1">
+            <app-icon name="lucide:sparkles" :size="15" /> Autofill</button>
           <button @click="exportData"
-                  class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium">⬇ Export</button>
-          <label class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium cursor-pointer">
-            ⬆ Import
+                  class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium inline-flex items-center gap-1">
+            <app-icon name="lucide:download" :size="15" /> Export</button>
+          <label class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium cursor-pointer inline-flex items-center gap-1">
+            <app-icon name="lucide:upload" :size="15" /> Import
             <input type="file" accept="application/json" class="hidden" @change="importData" />
           </label>
           <button @click="resetAll"
-                  class="px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium">Reset</button>
+                  class="px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium inline-flex items-center gap-1">
+            <app-icon name="lucide:rotate-ccw" :size="15" /> Reset</button>
         </div>
       </div>
     </header>
@@ -72,7 +81,9 @@
 
         <!-- ░░░░░░░░░░ GLOBAL SETUP ░░░░░░░░░░ -->
         <div class="bg-slate-200/60 border-b-2 border-slate-300 px-4 py-2">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">🛠️ Global Setup <span class="font-normal normal-case">· shared by all variants</span></h2>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <app-icon name="lucide:settings-2" :size="14" /> Global Setup
+            <span class="font-normal normal-case">· shared by all variants</span></h2>
         </div>
         <div class="p-4 space-y-3">
 
@@ -80,9 +91,10 @@
           <section class="bg-white rounded-xl shadow-sm border border-slate-200">
             <button @click="showDestinations = !showDestinations"
                     class="w-full flex items-center justify-between p-4 text-left">
-              <span class="font-semibold text-slate-700 flex items-center gap-2">📍 Key Destinations
+              <span class="font-semibold text-slate-700 flex items-center gap-2">
+                <app-icon name="lucide:map-pin" :size="18" class="text-brand" /> Key Destinations
                 <span class="text-xs font-normal text-slate-400">({{ state.destinations.length }})</span></span>
-              <span class="text-slate-400">{{ showDestinations ? '▾' : '▸' }}</span>
+              <app-icon :name="showDestinations ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400" />
             </button>
             <div v-show="showDestinations" class="px-4 pb-4 space-y-2">
               <p v-if="state.destinations.length < 4" class="text-xs text-amber-600">
@@ -93,9 +105,11 @@
                 <span class="w-6 h-6 rounded-full text-white text-xs flex items-center justify-center shrink-0"
                       :style="{ background: dest.color }">{{ destLabel(dest.id) }}</span>
                 <place-search :place="dest" :compact="true" placeholder="Search a destination…" class="flex-1" />
-                <button @click="removeDestination(dest.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
+                <button @click="removeDestination(dest.id)" class="text-rose-400 hover:text-rose-600 inline-flex">
+                  <app-icon name="lucide:x" :size="16" /></button>
               </div>
-              <button @click="addDestination" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add destination</button>
+              <button @click="addDestination" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark inline-flex items-center gap-1">
+                <app-icon name="lucide:plus" :size="13" /> Add destination</button>
             </div>
           </section>
 
@@ -103,9 +117,10 @@
           <section class="bg-white rounded-xl shadow-sm border border-slate-200">
             <button @click="showDayTrips = !showDayTrips"
                     class="w-full flex items-center justify-between p-4 text-left">
-              <span class="font-semibold text-slate-700 flex items-center gap-2">🌄 Day Trips
+              <span class="font-semibold text-slate-700 flex items-center gap-2">
+                <app-icon name="lucide:camera" :size="18" class="text-emerald-600" /> Day Trips
                 <span class="text-xs font-normal text-slate-400">({{ state.dayTrips.length }})</span></span>
-              <span class="text-slate-400">{{ showDayTrips ? '▾' : '▸' }}</span>
+              <app-icon :name="showDayTrips ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400" />
             </button>
             <div v-show="showDayTrips" class="px-4 pb-4 space-y-2">
               <p v-if="!state.dayTrips.length" class="text-xs text-slate-400">No day trips yet. They loop out and back to a key destination on the same day.</p>
@@ -113,7 +128,8 @@
                    class="bg-emerald-50 border border-emerald-100 rounded-lg p-2 space-y-2">
                 <div class="flex items-center gap-2">
                   <place-search :place="dt" :compact="true" placeholder="Search a day-trip location…" class="flex-1" />
-                  <button @click="removeDayTrip(dt.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
+                  <button @click="removeDayTrip(dt.id)" class="text-rose-400 hover:text-rose-600 inline-flex">
+                    <app-icon name="lucide:x" :size="16" /></button>
                 </div>
                 <label class="text-[11px] text-slate-500 block">Linked to key destination
                   <select v-model="dt.destinationId" class="num-input">
@@ -134,14 +150,16 @@
                 <p class="text-[11px] text-emerald-700">Round-trip total: ${{ dayTripCost(dt) }} · {{ fmtH(dayTripTime(dt)) }}</p>
               </div>
               <button @click="addDayTrip" :disabled="!state.destinations.length"
-                      class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40">+ Add day trip</button>
+                      class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40 inline-flex items-center gap-1">
+                <app-icon name="lucide:plus" :size="13" /> Add day trip</button>
             </div>
           </section>
         </div>
 
         <!-- ░░░░░░░░░░ VARIANT CONFIG ░░░░░░░░░░ -->
         <div class="bg-indigo-100 border-y-2 border-indigo-200 px-4 py-2">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-brand-dark flex items-center gap-2">🧩 Variant —
+          <h2 class="text-xs font-bold uppercase tracking-wider text-brand-dark flex items-center gap-1.5">
+            <app-icon name="lucide:puzzle" :size="14" /> Variant —
             <span class="normal-case">{{ activeVariant ? activeVariant.name : '—' }}</span></h2>
         </div>
         <div class="p-4 space-y-3" v-if="activeVariant">
@@ -149,26 +167,31 @@
           <!-- Endpoints & flights (per-variant) -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
             <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-slate-700 flex items-center gap-2">🛫 Endpoints &amp; Flights</h3>
+              <h3 class="font-semibold text-slate-700 flex items-center gap-2">
+                <app-icon name="lucide:plane" :size="18" class="text-sky-600" /> Endpoints &amp; Flights</h3>
               <select v-model="copySource" @change="copyEndpointsFrom(copySource)"
                       class="text-[11px] border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[150px]">
                 <option value="" disabled>Copy from…</option>
                 <option v-for="v in otherVariants" :key="v.id" :value="v.id">{{ v.name }}</option>
               </select>
             </div>
+            <p class="text-[11px] text-slate-400 -mt-1">
+              The cities you fly into and out of. Travel between an endpoint and the nearest destination is a leg below.
+            </p>
 
             <div class="grid grid-cols-2 gap-2">
-              <label class="text-xs font-medium text-slate-500">Origin (Point A)
-                <place-search :place="activeVariant.origin" placeholder="Search origin… e.g. London" />
+              <label class="text-xs font-medium text-slate-500">Fly INTO (arrival city)
+                <place-search :place="activeVariant.origin" placeholder="Search arrival city… e.g. London" />
               </label>
-              <label class="text-xs font-medium text-slate-500">Final Destination (Point B)
-                <place-search :place="activeVariant.destination" placeholder="Search destination… e.g. Lisbon" />
+              <label class="text-xs font-medium text-slate-500">Fly OUT OF (departure city)
+                <place-search :place="activeVariant.destination" placeholder="Search departure city… e.g. Lisbon" />
               </label>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
               <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
-                <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight INTO trip</p>
+                <p class="text-xs font-semibold text-sky-700 mb-1 flex items-center gap-1">
+                  <app-icon name="lucide:plane-landing" :size="14" /> Inbound flight</p>
                 <div class="flex gap-2">
                   <label class="text-[11px] text-slate-500 flex-1">Cost ($)
                     <input type="number" min="0" v-model.number="activeVariant.flightIn.cost" class="num-input" />
@@ -179,7 +202,8 @@
                 </div>
               </div>
               <div class="rounded-lg bg-sky-50 border border-sky-100 p-2">
-                <p class="text-xs font-semibold text-sky-700 mb-1">✈️ Flight OUT of trip</p>
+                <p class="text-xs font-semibold text-sky-700 mb-1 flex items-center gap-1">
+                  <app-icon name="lucide:plane-takeoff" :size="14" /> Outbound flight</p>
                 <div class="flex gap-2">
                   <label class="text-[11px] text-slate-500 flex-1">Cost ($)
                     <input type="number" min="0" v-model.number="activeVariant.flightOut.cost" class="num-input" />
@@ -192,19 +216,50 @@
             </div>
           </section>
 
-          <!-- Legs -->
+          <!-- Variant-specific costs -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <h3 class="font-semibold text-slate-700 flex items-center gap-2">🛤️ Legs &amp; Route Order</h3>
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-slate-700 flex items-center gap-2">
+                <app-icon name="lucide:briefcase" :size="18" class="text-slate-500" /> Variant Costs
+                <span class="text-xs font-normal text-slate-400">e.g. car hire, rail pass</span></h3>
+              <button @click="addExtraCost" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark inline-flex items-center gap-1">
+                <app-icon name="lucide:plus" :size="13" /> Add</button>
+            </div>
+            <p v-if="!activeVariant.extraCosts.length" class="text-xs text-slate-400">
+              Extra costs unique to this variant (added to its total only).
+            </p>
+            <div v-for="c in activeVariant.extraCosts" :key="c.id"
+                 class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+              <input v-model="c.label" class="flex-1 city-input !mt-0" placeholder="Cost label (e.g. Car hire)" />
+              <div class="relative">
+                <span class="absolute left-2 top-1.5 text-slate-400 text-sm">$</span>
+                <input type="number" min="0" v-model.number="c.amount" class="num-input !mt-0 w-24 !pl-5" />
+              </div>
+              <button @click="removeExtraCost(c.id)" class="text-rose-400 hover:text-rose-600 inline-flex">
+                <app-icon name="lucide:x" :size="16" /></button>
+            </div>
+          </section>
 
-            <div class="text-xs text-slate-500">Order (use arrows to reorder):</div>
+          <!-- Legs & route order -->
+          <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+            <h3 class="font-semibold text-slate-700 flex items-center gap-2">
+              <app-icon name="lucide:route" :size="18" class="text-brand" /> Legs &amp; Route Order</h3>
+
+            <div class="text-xs text-slate-500">Drag the handle to reorder key destinations:</div>
             <div class="space-y-1">
               <div v-for="(id, idx) in activeVariant.order" :key="id"
-                   class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                <span class="w-5 h-5 rounded-full text-white text-[10px] flex items-center justify-center"
+                   draggable="true"
+                   @dragstart="onDragStart(idx)"
+                   @dragenter.prevent="onDragEnter(idx)"
+                   @dragover.prevent
+                   @drop="onDrop(idx)"
+                   @dragend="onDragEnd"
+                   class="flex items-center gap-2 bg-slate-50 border rounded px-2 py-1.5 transition"
+                   :class="[dragIndex===idx ? 'opacity-40' : '', dragOverIndex===idx && dragIndex!==idx ? 'border-brand ring-1 ring-brand/40' : 'border-slate-200']">
+                <app-icon name="lucide:grip-vertical" :size="16" class="text-slate-400 cursor-grab active:cursor-grabbing shrink-0" />
+                <span class="w-5 h-5 rounded-full text-white text-[10px] flex items-center justify-center shrink-0"
                       :style="{ background: destById(id)?.color }">{{ destLabel(id) }}</span>
                 <span class="flex-1 text-sm">{{ destById(id)?.name || 'Unnamed' }}</span>
-                <button @click="moveDest(idx, -1)" :disabled="idx===0" class="text-slate-400 hover:text-brand disabled:opacity-30">▲</button>
-                <button @click="moveDest(idx, 1)" :disabled="idx===activeVariant.order.length-1" class="text-slate-400 hover:text-brand disabled:opacity-30">▼</button>
               </div>
             </div>
 
@@ -212,16 +267,22 @@
               <div v-for="leg in activeLegs" :key="leg.key"
                    class="border rounded-lg p-2" :style="{ borderColor: TRAVEL[leg.method].color + '55' }">
                 <div class="flex items-center gap-2 text-sm font-medium">
-                  <span>{{ destById(leg.fromId)?.name }}</span>
-                  <span class="text-slate-400">→</span>
-                  <span>{{ destById(leg.toId)?.name }}</span>
-                  <span v-if="leg.shared" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600"
-                        title="Shared across variants — edits prompt to sync globally">🔗 shared</span>
+                  <app-icon :name="TRAVEL[leg.method].lucide" :size="15" :style="{ color: TRAVEL[leg.method].color }" />
+                  <span>{{ leg.fromName }}</span>
+                  <app-icon name="lucide:arrow-right" :size="13" class="text-slate-400" />
+                  <span>{{ leg.toName }}</span>
+                  <span class="ml-auto flex items-center gap-1">
+                    <span v-if="leg.kind!=='mid'" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                      {{ leg.kind==='origin' ? 'arrival → 1st' : 'last → departure' }}</span>
+                    <span v-if="leg.shared" class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 inline-flex items-center gap-0.5"
+                          title="Shared across variants — edits prompt to sync globally">
+                      <app-icon name="lucide:link" :size="10" /> shared</span>
+                  </span>
                 </div>
                 <div class="flex gap-2 items-end mt-1">
                   <label class="text-[11px] text-slate-500 flex-1">Method
                     <select :value="leg.method" @change="setLegMethod(leg, $event.target.value)" class="num-input">
-                      <option v-for="(t,k) in TRAVEL" :key="k" :value="k">{{ t.icon }} {{ t.label }}</option>
+                      <option v-for="(t,k) in TRAVEL" :key="k" :value="k">{{ t.label }}</option>
                     </select>
                   </label>
                   <label class="text-[11px] text-slate-500 flex-1">Cost ($)
@@ -234,28 +295,7 @@
                   </label>
                 </div>
               </div>
-              <p v-if="activeLegs.length===0" class="text-xs text-slate-400">Add 2+ destinations to create legs.</p>
-            </div>
-          </section>
-
-          <!-- Variant-specific costs -->
-          <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-slate-700 flex items-center gap-2">💼 Variant Costs
-                <span class="text-xs font-normal text-slate-400">e.g. car hire, rail pass</span></h3>
-              <button @click="addExtraCost" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add</button>
-            </div>
-            <p v-if="!activeVariant.extraCosts.length" class="text-xs text-slate-400">
-              Extra costs unique to this variant (added to its total only).
-            </p>
-            <div v-for="c in activeVariant.extraCosts" :key="c.id"
-                 class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
-              <input v-model="c.label" class="flex-1 city-input !mt-0" placeholder="Cost label (e.g. Car hire)" />
-              <div class="relative">
-                <span class="absolute left-2 top-1.5 text-slate-400 text-sm">$</span>
-                <input type="number" min="0" v-model.number="c.amount" class="num-input !mt-0 w-24 !pl-5" />
-              </div>
-              <button @click="removeExtraCost(c.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
+              <p v-if="activeLegs.length===0" class="text-xs text-slate-400">Set an arrival &amp; departure city to create legs.</p>
             </div>
           </section>
         </div>
@@ -268,15 +308,18 @@
         <div class="bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-2 overflow-x-auto">
           <button v-for="v in state.variants" :key="v.id"
                   @click="state.activeVariantId = v.id"
-                  class="px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap border"
+                  class="px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap border inline-flex items-center"
                   :class="v.id===state.activeVariantId ? 'bg-brand text-white border-brand' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
             <span v-if="editingVariantId!==v.id" @dblclick="startRename(v)">{{ v.name }}</span>
             <input v-else :value="v.name" @blur="finishRename(v, $event.target.value)"
                    @keyup.enter="$event.target.blur()" class="bg-transparent text-white w-24 outline-none" />
-            <span v-if="state.variants.length>1" @click.stop="removeVariant(v.id)" class="ml-1 opacity-60 hover:opacity-100">×</span>
+            <span v-if="state.variants.length>1" @click.stop="removeVariant(v.id)" class="ml-1 opacity-60 hover:opacity-100 inline-flex">
+              <app-icon name="lucide:x" :size="13" /></span>
           </button>
-          <button @click="addVariant" class="px-3 py-1.5 rounded-md text-sm bg-slate-100 hover:bg-slate-200">+ Variant</button>
-          <button @click="duplicateVariant" class="px-3 py-1.5 rounded-md text-sm bg-slate-100 hover:bg-slate-200">⎘ Duplicate</button>
+          <button @click="addVariant" class="px-3 py-1.5 rounded-md text-sm bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1">
+            <app-icon name="lucide:plus" :size="14" /> Variant</button>
+          <button @click="duplicateVariant" class="px-3 py-1.5 rounded-md text-sm bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1">
+            <app-icon name="lucide:copy" :size="14" /> Duplicate</button>
         </div>
 
         <!-- Map -->
@@ -288,12 +331,13 @@
           <!-- travel-method legend -->
           <div class="absolute top-2 right-2 z-[500] bg-white/90 rounded-md px-2 py-1.5 text-[11px] shadow space-y-0.5">
             <div v-for="(t,k) in TRAVEL" :key="k" class="flex items-center gap-1.5">
-              <span class="inline-block w-4 h-0.5" :style="{ background: t.color }"></span>{{ t.icon }} {{ t.label }}
+              <span class="inline-block w-4 h-0.5" :style="{ background: t.color }"></span>
+              <app-icon :name="t.lucide" :size="13" :style="{ color: t.color }" /> {{ t.label }}
             </div>
           </div>
         </div>
 
-        <!-- Summary dashboard -->
+        <!-- Summary dashboard (emoji intentionally retained here) -->
         <div class="bg-white border-t border-slate-200 p-3">
           <h3 class="text-sm font-semibold text-slate-600 mb-2">📊 Variant Comparison Dashboard</h3>
           <div class="grid gap-2" :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }">
