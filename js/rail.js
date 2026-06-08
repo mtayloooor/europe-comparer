@@ -67,9 +67,11 @@
   // ── Overpass fetch ───────────────────────────────────────────────────
   // Shared Overpass POST with timeout + mirror fallback. Returns elements[] or null.
   async function overpass(query) {
+    const D = window.DebugLog;
     for (const url of ENDPOINTS) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+      const started = Date.now();
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -77,15 +79,24 @@
           signal: ctrl.signal,
         });
         clearTimeout(t);
-        if (!res.ok) continue;
+        if (!res.ok) {
+          D && D.warn(`Overpass HTTP ${res.status} from ${host(url)}`);
+          continue;
+        }
         const data = await res.json();
+        const n = data && Array.isArray(data.elements) ? data.elements.length : 0;
+        D && D.info(`Overpass ${host(url)} → ${n} elements (${Date.now() - started}ms)`);
         if (data && Array.isArray(data.elements)) return data.elements;
       } catch (e) {
         clearTimeout(t);
-        // try the next mirror
+        D && D.warn(`Overpass ${host(url)} failed: ${e.name === 'AbortError' ? 'timeout' : e.message}`);
       }
     }
+    D && D.error('Overpass: all endpoints failed');
     return null;
+  }
+  function host(url) {
+    try { return new URL(url).host; } catch (e) { return url; }
   }
 
   async function fetchRail(poly) {
@@ -134,12 +145,14 @@
       `node["railway"="halt"](around:${STATION_RADIUS},${place.lat},${place.lng}););` +
       `out body;`;
 
+    const D = window.DebugLog;
     let result = null;
     try {
       const elements = await overpass(query);
       const cands = (elements || [])
         .filter((e) => e.tags && e.tags.name && e.lat != null)
         .map((e) => ({ name: e.tags.name, lat: e.lat, lng: e.lon, n: norm(e.tags.name) }));
+      D && D.info(`Station search "${place.name}" → ${cands.length} stations`);
       if (cands.length) {
         const city = norm(place.name);
         cands.forEach((c) => {
@@ -160,9 +173,15 @@
         pool.sort((a, b) => a.dist - b.dist);
         const best = pool[0];
         result = { name: best.name, lat: best.lat, lng: best.lng };
+        D && D.info(
+          `Station for "${place.name}": ${best.name} ` +
+          `(${close.length ? 'name match' : 'nearest'}, ${best.dist.toFixed(1)}km)`
+        );
+      } else {
+        D && D.warn(`No station found near "${place.name}"`);
       }
     } catch (e) {
-      // leave result null
+      D && D.error(`Station resolve error for "${place.name}": ${e.message}`);
     }
     stationCache.set(key, result);
     return result;
@@ -297,37 +316,49 @@
     ) {
       return null;
     }
+    const D = window.DebugLog;
     const distKm = haversine(from.lat, from.lng, to.lat, to.lng);
-    if (distKm < 1 || distKm > MAX_LEG_KM) return null;
+    if (distKm < 1 || distKm > MAX_LEG_KM) {
+      D && D.warn(`Rail skip: leg ${distKm.toFixed(0)}km out of range (1–${MAX_LEG_KM}km)`);
+      return null;
+    }
 
     const key = `${from.lat.toFixed(3)},${from.lng.toFixed(3)}->${to.lat.toFixed(3)},${to.lng.toFixed(3)}`;
     if (cache.has(key)) return cache.get(key);
 
     try {
       const widthKm = Math.min(35, Math.max(12, distKm * 0.12));
+      D && D.info(`Rail route ${distKm.toFixed(0)}km, corridor ±${widthKm.toFixed(0)}km`);
       const elements = await fetchRail(corridorPolygon(from, to, widthKm));
       if (!elements || !elements.length) {
+        D && D.warn('Rail fallback: no rail ways returned for corridor');
         cache.set(key, null);
         return null;
       }
       const { coords, adj } = buildGraph(elements);
+      D && D.info(`Rail graph: ${coords.size} nodes from ${elements.length} ways`);
       if (!coords.size || coords.size > MAX_NODES) {
+        D && D.warn(`Rail fallback: graph size ${coords.size} (cap ${MAX_NODES})`);
         cache.set(key, null);
         return null;
       }
       const startId = nearestNode(coords, from.lat, from.lng);
       const goalId = nearestNode(coords, to.lat, to.lng);
+      const snapA = startId != null ? haversine(from.lat, from.lng, coords.get(startId)[0], coords.get(startId)[1]) : -1;
+      const snapB = goalId != null ? haversine(to.lat, to.lng, coords.get(goalId)[0], coords.get(goalId)[1]) : -1;
+      D && D.info(`Rail snap: start ${snapA.toFixed(1)}km, goal ${snapB.toFixed(1)}km from endpoints`);
       const railPath = startId != null && goalId != null ? dijkstra(adj, coords, startId, goalId) : null;
       if (!railPath || railPath.length < 2) {
+        D && D.warn('Rail fallback: no connected path between snapped nodes (disconnected graph)');
         cache.set(key, null);
         return null;
       }
-      // Connect the actual city points to the snapped rail entry/exit.
       const result = [[from.lat, from.lng], ...railPath, [to.lat, to.lng]];
+      D && D.info(`Rail OK: ${railPath.length} points along track`);
       cache.set(key, result);
       return result;
     } catch (e) {
-      console.warn('Rail routing failed, falling back:', e.message);
+      D && D.error('Rail routing error: ' + e.message);
       cache.set(key, null);
       return null;
     }

@@ -25,6 +25,26 @@
       const showDestinations = ref(true);
       const showDayTrips = ref(true);
 
+      // ── In-page debug log ──────────────────────────────────────────
+      const debugEntries = reactive([]);
+      const showDebug = ref(false);
+      window.DebugLog.attach(debugEntries);
+      window.DebugLog.info('App initialised');
+      function clearDebug() {
+        window.DebugLog.clear();
+      }
+      async function copyDebug() {
+        const text = debugEntries
+          .map((e) => `${e.t} [${e.level}] ${e.message}` + (e.data ? ' ' + JSON.stringify(e.data) : ''))
+          .join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          window.DebugLog.info('Debug log copied to clipboard');
+        } catch (e) {
+          window.DebugLog.warn('Clipboard copy failed: ' + e.message);
+        }
+      }
+
       let mapCtl = null;
 
       const TRAVEL = M.TRAVEL;
@@ -351,6 +371,9 @@
         if (!mapCtl || !activeVariant.value) return;
         const token = (renderSeq += 1);
         const { markers, segments, dayTrips } = buildMapPayload();
+        window.DebugLog.info(
+          `Render "${activeVariant.value.name}": ${segments.length} legs [${segments.map((s) => s.method).join(', ')}]`
+        );
 
         const legs = await Promise.all(
           segments.map(async (seg) => {
@@ -439,6 +462,10 @@
         TRAVEL,
         editingVariantId,
         syncPrompt,
+        debugEntries,
+        showDebug,
+        clearDebug,
+        copyDebug,
         copySource,
         showDestinations,
         showDayTrips,

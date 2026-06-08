@@ -101,6 +101,11 @@
     }
 
     cache.set(key, result);
+    const D = window.DebugLog;
+    D && D.info(
+      `Leg ${method}: ${result.coords.length} pts, ` +
+      (result.approximate ? 'straight/approx' : 'routed')
+    );
     return result;
   }
 
