@@ -7,7 +7,7 @@
   const { createApp, reactive, ref, computed, watch, onMounted, nextTick } = Vue;
   const M = window.Models;
 
-  createApp({
+  const app = createApp({
     setup() {
       // ── State ──────────────────────────────────────────────────────
       const loaded = M.load();
@@ -28,7 +28,6 @@
       let mapCtl = null;
 
       const TRAVEL = M.TRAVEL;
-      const CITY_NAMES = Object.keys(window.CITIES).filter((k) => k !== 'lookup');
 
       // ── Lookups ────────────────────────────────────────────────────
       const destById = (id) => state.destinations.find((d) => d.id === id);
@@ -88,15 +87,6 @@
       };
       const dayTripCost = M.dayTripCost;
       const dayTripTime = M.dayTripTime;
-
-      // ── Places ─────────────────────────────────────────────────────
-      function onPlaceName(p) {
-        const coords = window.CITIES.lookup(p.name);
-        if (coords) {
-          p.lat = coords.lat;
-          p.lng = coords.lng;
-        }
-      }
 
       // ── Destinations (global setup) ────────────────────────────────
       function addDestination() {
@@ -402,7 +392,6 @@
       return {
         state,
         TRAVEL,
-        CITY_NAMES,
         editingVariantId,
         syncPrompt,
         copySource,
@@ -419,7 +408,6 @@
         fmtH,
         dayTripCost,
         dayTripTime,
-        onPlaceName,
         addDestination,
         removeDestination,
         addDayTrip,
@@ -444,5 +432,8 @@
         changeToken,
       };
     },
-  }).mount('#app');
+  });
+
+  app.component('place-search', window.PlaceSearchComponent);
+  app.mount('#app');
 })();

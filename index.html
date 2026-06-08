@@ -92,8 +92,7 @@
                    class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
                 <span class="w-6 h-6 rounded-full text-white text-xs flex items-center justify-center shrink-0"
                       :style="{ background: dest.color }">{{ destLabel(dest.id) }}</span>
-                <input list="city-list" v-model="dest.name" @change="onPlaceName(dest)"
-                       class="flex-1 city-input !mt-0" placeholder="Destination name" />
+                <place-search :place="dest" :compact="true" placeholder="Search a destination…" class="flex-1" />
                 <button @click="removeDestination(dest.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
               </div>
               <button @click="addDestination" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark">+ Add destination</button>
@@ -113,8 +112,7 @@
               <div v-for="dt in state.dayTrips" :key="dt.id"
                    class="bg-emerald-50 border border-emerald-100 rounded-lg p-2 space-y-2">
                 <div class="flex items-center gap-2">
-                  <input list="city-list" v-model="dt.name" @change="onPlaceName(dt)"
-                         class="flex-1 city-input !mt-0" placeholder="Day trip location" />
+                  <place-search :place="dt" :compact="true" placeholder="Search a day-trip location…" class="flex-1" />
                   <button @click="removeDayTrip(dt.id)" class="text-rose-400 hover:text-rose-600 text-lg leading-none">×</button>
                 </div>
                 <label class="text-[11px] text-slate-500 block">Linked to key destination
@@ -161,12 +159,10 @@
 
             <div class="grid grid-cols-2 gap-2">
               <label class="text-xs font-medium text-slate-500">Origin (Point A)
-                <input list="city-list" v-model="activeVariant.origin.name" @change="onPlaceName(activeVariant.origin)"
-                       class="city-input" placeholder="e.g. London" />
+                <place-search :place="activeVariant.origin" placeholder="Search origin… e.g. London" />
               </label>
               <label class="text-xs font-medium text-slate-500">Final Destination (Point B)
-                <input list="city-list" v-model="activeVariant.destination.name" @change="onPlaceName(activeVariant.destination)"
-                       class="city-input" placeholder="e.g. Lisbon" />
+                <place-search :place="activeVariant.destination" placeholder="Search destination… e.g. Lisbon" />
               </label>
             </div>
 
@@ -322,11 +318,6 @@
       </main>
     </div>
 
-    <!-- City suggestions -->
-    <datalist id="city-list">
-      <option v-for="c in CITY_NAMES" :key="c" :value="c"></option>
-    </datalist>
-
     <!-- Global-sync prompt modal -->
     <div v-if="syncPrompt" class="fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-4">
       <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3">
@@ -345,9 +336,11 @@
 
   <!-- Modular scripts (load order matters; non-module so it runs from file://) -->
   <script src="./js/cities.js"></script>
+  <script src="./js/geocode.js"></script>
   <script src="./js/models.js"></script>
   <script src="./js/routing.js"></script>
   <script src="./js/map.js"></script>
+  <script src="./js/place-search.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>
