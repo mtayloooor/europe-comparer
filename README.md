@@ -25,9 +25,18 @@ The UI is split into two clearly separated zones:
 
 ## Features
 
+### Place search (geocoding)
+Origin, destination, key-destination and day-trip fields are **live search
+boxes**, not a fixed list — type any place (e.g. *Sestri Levante*) and pick from
+real geocoded results, which sets the map coordinates. Powered by
+[Photon](https://photon.komoot.io) (free, CORS, no key) over OpenStreetMap data,
+with the built-in gazetteer as an offline fallback. A ⚠ marker shows when a
+field has text but no resolved map location yet. See `js/geocode.js` /
+`js/place-search.js`.
+
 ### Global setup
-- **Key destinations** — define the core cities (4+ recommended). Known European
-  cities auto-fill map coordinates. Collapsible.
+- **Key destinations** — define the core cities (4+ recommended). Search and
+  pick real places; coordinates are filled automatically. Collapsible.
 - **Day trips** — attach a same-day loop to any key destination. Inputs are
   one-way by default and automatically **doubled** for the round trip (toggle off
   if you enter the full loop cost/time yourself). Collapsible.
@@ -106,7 +115,9 @@ transit provider — assign an async function to `RouteService.transitProvider`
 ```
 index.html      markup + CDN deps (Tailwind, Vue 3, Leaflet, MapKit JS)
 styles.css      small custom styles on top of Tailwind
-js/cities.js    built-in European city gazetteer (name -> lat/lng)
+js/cities.js    built-in European city gazetteer (offline geocode fallback)
+js/geocode.js   GeoSearch: place search / geocoding via Photon (+ gazetteer fallback)
+js/place-search.js  <place-search> Vue autocomplete component
 js/models.js    data models, factories, leg helpers, totals, persistence, migration
 js/routing.js   RouteService: per-method leg geometry (OSRM driving / straight / transit hook)
 js/map.js       MapController: Leaflet adapter + Apple MapKit JS adapter
