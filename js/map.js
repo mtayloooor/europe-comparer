@@ -1,27 +1,33 @@
 /**
  * map.js
  * Map abstraction layer. Exposes window.MapController with a provider-agnostic
- * API so the Leaflet/OpenStreetMap fallback can be swapped for Apple MapKit JS
- * without touching the rest of the app.
+ * API so the Leaflet/OpenStreetMap fallback and Apple MapKit JS share one
+ * interface. Routing geometry is computed upstream (routing.js); the adapters
+ * here only *draw* what they're given.
  *
  * Common API:
  *   MapController.create(elementId, config) -> controller
- *   controller.render({ origin, destination, stops, dayTrips })
+ *   controller.render({ markers, legs, dayTrips })
+ *   controller.destroy()
+ *   controller._impl  // 'leaflet' | 'mapkit'
  *
- * Where points are { name, lat, lng, color? }.
+ *   markers : [{ lat, lng, label, color, name }]            // in route order
+ *   legs    : [{ coords:[[lat,lng],...], color, dashed }]   // one per segment
+ *   dayTrips: [{ lat, lng, name, parentLat, parentLng }]
  *
- * ── Swapping to Apple MapKit JS ────────────────────────────────────────
- * 1. Add to index.html:
- *      <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"></script>
- * 2. Provide a MapKit JWT token in config.mapkitToken (or window.MAPKIT_TOKEN).
- * 3. The MapKitAdapter below mirrors the Leaflet adapter: markers become
- *    mapkit.MarkerAnnotation, the route polyline becomes a
- *    mapkit.PolylineOverlay, and day-trip branches are dashed PolylineOverlays.
- * The app calls the same .render() shape for both, so no app changes needed.
+ * Apple MapKit JS requires a signed JWT (config.mapkitToken / window.MAPKIT_TOKEN).
  * ───────────────────────────────────────────────────────────────────────
  */
 (function () {
   const EUROPE_CENTER = [48.0, 9.0];
+
+  function allPoints(markers, legs, dayTrips) {
+    const pts = [];
+    markers.forEach((m) => m.lat != null && pts.push([m.lat, m.lng]));
+    legs.forEach((l) => l.coords.forEach((c) => pts.push(c)));
+    dayTrips.forEach((d) => d.lat != null && pts.push([d.lat, d.lng]));
+    return pts;
+  }
 
   // ── Leaflet / OpenStreetMap adapter (default fallback) ────────────────
   function LeafletAdapter(elementId) {
@@ -32,10 +38,9 @@
     }).addTo(map);
 
     let layers = [];
-
-    // Flex/responsive containers can mis-measure on first paint.
-    setTimeout(() => map.invalidateSize(), 200);
-    window.addEventListener('resize', () => map.invalidateSize());
+    const onResize = () => map.invalidateSize();
+    setTimeout(onResize, 200);
+    window.addEventListener('resize', onResize);
 
     function clear() {
       layers.forEach((l) => map.removeLayer(l));
@@ -54,61 +59,70 @@
       });
     }
 
-    function addMarker(p, color, label) {
-      if (p.lat == null || p.lng == null) return null;
-      const m = L.marker([p.lat, p.lng], { icon: pin(color, label) })
-        .addTo(map)
-        .bindTooltip(p.name || 'Unnamed', { direction: 'top', offset: [0, -18] });
-      layers.push(m);
-      return [p.lat, p.lng];
-    }
-
-    function render({ origin, destination, stops, dayTrips }) {
+    function render({ markers, legs, dayTrips }) {
       clear();
-      const routePts = [];
-
-      const o = addMarker(origin, '#1e293b', 'A');
-      if (o) routePts.push(o);
-
-      stops.forEach((s, i) => {
-        const pt = addMarker(s, s.color || '#6366f1', String(i + 1));
-        if (pt) routePts.push(pt);
+      legs.forEach((leg) => {
+        if (leg.coords.length < 2) return;
+        const line = L.polyline(leg.coords, {
+          color: leg.color,
+          weight: 4,
+          opacity: 0.85,
+          dashArray: leg.dashed ? '8,8' : null,
+        }).addTo(map);
+        layers.push(line);
       });
 
-      const d = addMarker(destination, '#1e293b', 'B');
-      if (d) routePts.push(d);
+      markers.forEach((m) => {
+        if (m.lat == null) return;
+        const mk = L.marker([m.lat, m.lng], { icon: pin(m.color, m.label) })
+          .addTo(map)
+          .bindTooltip(m.name || 'Unnamed', { direction: 'top', offset: [0, -18] });
+        layers.push(mk);
+      });
 
-      // Main route line.
-      if (routePts.length >= 2) {
-        const line = L.polyline(routePts, { color: '#4f46e5', weight: 4, opacity: 0.85 }).addTo(map);
-        layers.push(line);
-        map.fitBounds(line.getBounds().pad(0.25));
-      } else if (routePts.length === 1) {
-        map.setView(routePts[0], 5);
-      }
-
-      // Day-trip branches (secondary markers + dashed line to parent).
-      (dayTrips || []).forEach((dt) => {
-        const parentPt = addMarker(dt, '#10b981', '◆');
-        if (parentPt && dt.parentLat != null && dt.parentLng != null) {
-          const branch = L.polyline(
-            [[dt.parentLat, dt.parentLng], [dt.lat, dt.lng]],
-            { color: '#10b981', weight: 2, dashArray: '5,6', opacity: 0.8 }
-          ).addTo(map);
+      dayTrips.forEach((dt) => {
+        if (dt.lat == null) return;
+        const mk = L.marker([dt.lat, dt.lng], { icon: pin('#10b981', '◆') })
+          .addTo(map)
+          .bindTooltip(`${dt.name || 'Day trip'} (day trip)`, { direction: 'top', offset: [0, -18] });
+        layers.push(mk);
+        if (dt.parentLat != null) {
+          const branch = L.polyline([[dt.parentLat, dt.parentLng], [dt.lat, dt.lng]], {
+            color: '#10b981',
+            weight: 2,
+            dashArray: '5,6',
+            opacity: 0.8,
+          }).addTo(map);
           layers.push(branch);
         }
       });
+
+      const pts = allPoints(markers, legs, dayTrips);
+      if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts).pad(0.25));
+      else if (pts.length === 1) map.setView(pts[0], 5);
     }
 
-    return { render, _impl: 'leaflet' };
+    function destroy() {
+      window.removeEventListener('resize', onResize);
+      map.remove();
+    }
+
+    return { render, destroy, _impl: 'leaflet' };
   }
 
-  // ── Apple MapKit JS adapter (stub — wire up when token is available) ───
+  // ── Apple MapKit JS adapter ───────────────────────────────────────────
   function MapKitAdapter(elementId, config) {
     if (typeof mapkit === 'undefined') throw new Error('MapKit JS not loaded');
-    mapkit.init({
-      authorizationCallback: (done) => done(config.mapkitToken || window.MAPKIT_TOKEN),
-    });
+    const token = config.mapkitToken || window.MAPKIT_TOKEN;
+    if (!token) throw new Error('No MapKit token provided');
+
+    // Keep the latest token in a shared slot so the (one-time) auth callback
+    // always hands MapKit the most recently entered token.
+    window.__MAPKIT_TOKEN = token;
+    if (!mapkit.__inited) {
+      mapkit.init({ authorizationCallback: (done) => done(window.__MAPKIT_TOKEN) });
+      mapkit.__inited = true;
+    }
     const map = new mapkit.Map(elementId);
     let annotations = [];
     let overlays = [];
@@ -120,53 +134,72 @@
       overlays = [];
     }
 
-    function coord(p) {
-      return new mapkit.Coordinate(p.lat, p.lng);
-    }
+    const coord = (lat, lng) => new mapkit.Coordinate(lat, lng);
 
-    function render({ origin, destination, stops, dayTrips }) {
+    function render({ markers, legs, dayTrips }) {
       clear();
-      const seq = [origin, ...stops, destination].filter((p) => p && p.lat != null);
-      seq.forEach((p, i) => {
-        const a = new mapkit.MarkerAnnotation(coord(p), {
-          title: p.name,
-          glyphText: i === 0 ? 'A' : i === seq.length - 1 ? 'B' : String(i),
-        });
-        annotations.push(a);
-      });
-      map.addAnnotations(annotations);
 
-      if (seq.length >= 2) {
-        const line = new mapkit.PolylineOverlay(seq.map(coord), {
-          style: new mapkit.Style({ lineWidth: 4, strokeColor: '#4f46e5' }),
+      legs.forEach((leg) => {
+        if (leg.coords.length < 2) return;
+        const style = new mapkit.Style({
+          lineWidth: 4,
+          strokeColor: leg.color,
+          lineDash: leg.dashed ? [8, 8] : [],
         });
-        overlays.push(line);
-      }
-      (dayTrips || []).forEach((dt) => {
-        if (dt.lat == null || dt.parentLat == null) return;
-        const branch = new mapkit.PolylineOverlay(
-          [coord(dt), new mapkit.Coordinate(dt.parentLat, dt.parentLng)],
-          { style: new mapkit.Style({ lineWidth: 2, strokeColor: '#10b981', lineDash: [4, 4] }) }
-        );
-        overlays.push(branch);
-        annotations.push(new mapkit.MarkerAnnotation(coord(dt), { title: dt.name, color: '#10b981' }));
+        overlays.push(new mapkit.PolylineOverlay(leg.coords.map(([la, ln]) => coord(la, ln)), { style }));
       });
+
+      markers.forEach((m) => {
+        if (m.lat == null) return;
+        annotations.push(
+          new mapkit.MarkerAnnotation(coord(m.lat, m.lng), {
+            title: m.name,
+            glyphText: m.label,
+            color: m.color,
+          })
+        );
+      });
+
+      dayTrips.forEach((dt) => {
+        if (dt.lat == null) return;
+        annotations.push(
+          new mapkit.MarkerAnnotation(coord(dt.lat, dt.lng), { title: dt.name, color: '#10b981' })
+        );
+        if (dt.parentLat != null) {
+          overlays.push(
+            new mapkit.PolylineOverlay(
+              [coord(dt.lat, dt.lng), coord(dt.parentLat, dt.parentLng)],
+              { style: new mapkit.Style({ lineWidth: 2, strokeColor: '#10b981', lineDash: [4, 4] }) }
+            )
+          );
+        }
+      });
+
       if (overlays.length) map.addOverlays(overlays);
-      map.addAnnotations(annotations);
-      if (seq.length) map.showItems(annotations);
+      if (annotations.length) {
+        map.addAnnotations(annotations);
+        map.showItems(annotations);
+      }
     }
 
-    return { render, _impl: 'mapkit' };
+    function destroy() {
+      try {
+        map.destroy();
+      } catch (e) {
+        /* noop */
+      }
+    }
+
+    return { render, destroy, _impl: 'mapkit' };
   }
 
   function create(elementId, config = {}) {
-    const wantMapKit =
-      config.provider === 'mapkit' && (config.mapkitToken || window.MAPKIT_TOKEN);
-    if (wantMapKit) {
+    if (config.provider === 'mapkit') {
       try {
         return MapKitAdapter(elementId, config);
       } catch (e) {
-        console.warn('MapKit unavailable, falling back to Leaflet:', e);
+        console.warn('MapKit unavailable, falling back to Leaflet:', e.message);
+        if (typeof config.onMapKitError === 'function') config.onMapKitError(e);
       }
     }
     return LeafletAdapter(elementId);

@@ -1,80 +1,125 @@
 # 🧭 Europe Trip Comparator
 
 A lightweight, responsive single-page app for comparing **variants** of a
-multi-city trip by **total cost** and **total travel time**. Build a route once,
-spin up alternative orderings / travel methods, and watch the dashboard and map
-update instantly.
+multi-city trip by **total cost** and **total travel time**. Build the trip
+scaffolding once, spin up alternative itineraries, and watch the dashboard and
+map update instantly.
 
 No build step — open `index.html` in a browser, or serve the folder with any
 static server.
 
 ```bash
-# optional: serve locally (recommended so localStorage + tiles behave)
+# optional: serve locally (recommended so map tiles + routing behave)
 python3 -m http.server 8000
 # then visit http://localhost:8000
 ```
 
+## Layout
+
+The UI is split into two clearly separated zones:
+
+- **🛠️ Global Setup** (shared by all variants) — collapsible **Key Destinations**
+  and **Day Trips** sections. These define the building blocks of the trip.
+- **🧩 Variant** (per active variant) — **Endpoints & Flights**, **Legs & Route
+  Order**, and **Variant Costs**. Everything here can differ between variants.
+
 ## Features
 
-- **Trip endpoints & flights** — Origin (A) and Final Destination (B), each with
-  a manually editable flight **cost** and **time** into and out of the trip.
-- **Key destinations** — define the core cities (4+ recommended) that form the
-  body of the trip. Known European cities auto-fill map coordinates.
+### Global setup
+- **Key destinations** — define the core cities (4+ recommended). Known European
+  cities auto-fill map coordinates. Collapsible.
 - **Day trips** — attach a same-day loop to any key destination. Inputs are
   one-way by default and automatically **doubled** for the round trip (toggle off
-  if you enter the full loop cost/time yourself).
-- **Variant comparison engine**
-  - Create / duplicate / rename multiple variants of the same trip.
-  - Reorder key destinations per variant (▲ / ▼).
-  - Pick a travel **method** per leg (Flight ✈️, Train 🚆, Bus 🚌, Car 🚗, Ferry ⛴️).
-  - **Data inheritance:** leg estimates live in a global library keyed by
-    `pair + method`, so an identical leg shared across variants carries its
-    cost/time over automatically. Editing a shared leg prompts you to apply the
-    change **globally** or **only to this variant**.
-- **Dashboard** — quick-toggle variant tabs plus a side-by-side comparison grid
-  showing total price, total time, the cheapest 💰 / fastest ⚡ badges, and the
-  delta vs. the cheapest option.
-- **Map** — draws Origin → key destinations (in order) → Final Destination, with
+  if you enter the full loop cost/time yourself). Collapsible.
+
+### Per-variant configuration
+- **Endpoints & Flights** — Origin (A) / Final Destination (B) plus editable
+  flight **cost + time** into and out of the trip. These live on the variant, so
+  they can differ between itineraries. A **"Copy from…"** dropdown clones another
+  variant's endpoints/flights in one click.
+- **Legs & route order** — reorder key destinations (▲ / ▼) and pick a travel
+  **method** per leg (Flight ✈️, Train 🚆, Bus 🚌, Car 🚗, Ferry ⛴️).
+- **Variant costs** — arbitrary named line items unique to a variant (e.g. car
+  hire, rail pass), added to that variant's total only.
+
+### Comparison engine
+- Create / duplicate / rename multiple variants via the tabs.
+- **Data inheritance:** leg estimates live in a global library keyed by
+  `pair + method`, so an identical leg shared across variants carries its
+  cost/time over automatically. Editing a shared leg prompts you to apply the
+  change **globally** or **only to this variant**.
+- **Dashboard** — side-by-side comparison grid showing total price, total time,
+  cheapest 💰 / fastest ⚡ badges, and the delta vs. the cheapest option.
+
+### Map
+- Draws Origin → key destinations (in variant order) → Final Destination, with
   day trips plotted as dashed branches off their parent city.
-- **Autofill Estimates** — fills realistic mock cost/time for every empty leg,
-  flight, and day trip based on travel type so you can see the engine work fast.
-- **Persistence** — state is saved to `localStorage` on every change, plus JSON
-  **Export** / **Import** for sharing or backup.
+- **Lines reflect the travel method:**
+  - **Car / Bus** → real driving route via OSRM (follows the road network).
+  - **Flight** (in/out and any flight leg) → straight line, dashed.
+  - **Train** → straight line for now (see *Transit routing* below).
+  - Any leg that can't be routed (e.g. offline) falls back to a dashed straight
+    line.
+- A legend maps each colour to its travel method.
 
-## Map provider
+### Map providers — OpenStreetMap ⇄ Apple Maps
+Toggle between **Leaflet/OpenStreetMap** (default, no credentials) and **Apple
+MapKit JS** with the header switch.
 
-The map uses **Leaflet + OpenStreetMap** by default (no credentials needed) and
-is structured behind a provider-agnostic `MapController` so it can be swapped for
-**Apple MapKit JS** with no app changes:
+Apple MapKit JS only renders with a signed developer **JWT token**. The first
+time you switch to Apple, the app prompts you to paste one (🔑 button to
+replace it later). The token is stored in `localStorage` **and included in
+Export/Import** so it travels with your configuration.
 
-1. Add the MapKit script to `index.html`:
-   ```html
-   <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"></script>
-   ```
-2. Expose a MapKit JWT, e.g. `window.MAPKIT_TOKEN = '...'`.
-3. In `js/app.js`, set the map config `provider: 'mapkit'`.
+> ⚠️ The token is saved in plain text in localStorage and in the exported JSON.
+> Treat export files as sensitive and don't commit them to a public repo.
 
-The `MapKitAdapter` in `js/map.js` already mirrors the Leaflet adapter
-(markers → `MarkerAnnotation`, route → `PolylineOverlay`, day-trip branches →
-dashed `PolylineOverlay`).
+Get a token at *developer.apple.com → Certificates, IDs & Profiles → Maps IDs /
+Keys* (requires an Apple Developer account). Tokens expire, so you'll re-enter
+periodically.
+
+### Data management
+- Every leg / flight / day trip / variant cost has editable cost + duration
+  inputs.
+- **Autofill Estimates** fills realistic mock values per travel type for any
+  empty leg, flight, or day trip.
+- State persists to `localStorage` on every change, plus JSON **Export/Import**.
+
+## Transit (Train / public-transport) routing
+
+True rail/PT route geometry isn't available from a free API, and **Apple MapKit
+JS has no transit directions** (Automobile/Walking only). **Google Maps can**
+return transit polylines (Directions API / Routes API `mode=transit`, or the
+Maps JS `DirectionsService` with `travelMode: TRANSIT`), **but**:
+
+1. requires an API key with **billing enabled**;
+2. the REST Directions API is **server-side only** (browser CORS) → needs a proxy;
+3. Google's ToS requires Google-derived geometry to be displayed **on a Google
+   map**, so drawing it on Leaflet/Apple is non-compliant.
+
+So Train legs use straight lines for now. The code is structured for a drop-in
+transit provider — assign an async function to `RouteService.transitProvider`
+(see `js/routing.js`) and Train/Bus legs will use it.
 
 ## Project structure
 
 ```
-index.html      # markup + CDN deps (Tailwind, Vue 3, Leaflet)
-styles.css      # small custom styles on top of Tailwind
-js/cities.js    # built-in European city gazetteer (name -> lat/lng)
-js/models.js    # data models, factories, leg-key helpers, totals, persistence
-js/map.js       # MapController: Leaflet adapter + Apple MapKit JS adapter
-js/app.js       # Vue 3 application wiring it all together
+index.html      markup + CDN deps (Tailwind, Vue 3, Leaflet, MapKit JS)
+styles.css      small custom styles on top of Tailwind
+js/cities.js    built-in European city gazetteer (name -> lat/lng)
+js/models.js    data models, factories, leg helpers, totals, persistence, migration
+js/routing.js   RouteService: per-method leg geometry (OSRM driving / straight / transit hook)
+js/map.js       MapController: Leaflet adapter + Apple MapKit JS adapter
+js/app.js       Vue 3 application wiring it all together
 ```
 
-## Data model
+## Data model (schema v2)
 
 See the header comment in `js/models.js` for the full schema. In brief:
 
-- **Leg estimates** are stored in a global `legLibrary` keyed by
-  `"<sortedPair>::<method>"`, which is what enables cross-variant inheritance.
-- A **variant** holds an ordered list of destination ids, a method per pair, and
-  optional per-variant `overrides` for legs that intentionally diverge from the
-  global value.
+- **Endpoints, flights, and extra costs are per-variant.** Day trips, key
+  destinations and the leg-estimate library are global.
+- **Leg estimates** live in a global `legLibrary` keyed by
+  `"<sortedPair>::<method>"`, which enables cross-variant inheritance. A variant
+  may carry per-leg `overrides` to intentionally diverge from the global value.
+- Older (v1) saved/imported data is migrated automatically on load.
