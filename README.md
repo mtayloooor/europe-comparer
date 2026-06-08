@@ -110,10 +110,15 @@ for fully offline use later. A few emoji are intentionally kept in the
 
 ## Transit (Train / public-transport) routing
 
-Train legs are **approximated along real rail geometry**: for a Train leg the app
-fetches the main running lines in a narrow corridor between the two points from
-**Overpass (OpenStreetMap)**, builds a connectivity graph from the rail ways, and
-runs a shortest-path along the tracks (see `js/rail.js`). It's bounded by a
+Train legs are **approximated along real rail geometry**. For each city the app
+first resolves the **best railway station** (via Overpass): if a station name
+closely matches the city it's used — preferring the main/central station when
+several match (e.g. *Milan → Milano Centrale*) — otherwise the station nearest
+the city pin. The leg planner then shows `City (Station)` with the station name in
+a lighter font. The rail line is snapped **station-to-station**: the app fetches
+the main running lines in a narrow corridor from **Overpass (OpenStreetMap)**,
+builds a connectivity graph from the rail ways, and runs a shortest-path along
+the tracks (see `js/rail.js`). It's bounded by a
 corridor polygon, a max-distance cap, a request timeout and a node-count guard,
 and **falls back to a straight dashed line** whenever Overpass is unreachable,
 the leg is too long, or no connected rail path is found. It's an approximation —

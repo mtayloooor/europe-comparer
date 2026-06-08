@@ -49,11 +49,16 @@
         );
       }
 
+      // Best railway station per place id, resolved during map render (train legs).
+      const stationByPlace = reactive({});
+
       const activeLegs = computed(() => {
         if (!activeVariant.value) return [];
         return M.variantLegs(state, activeVariant.value).map((leg) => ({
           ...leg,
           shared: variantsUsing(leg.mk).length > 1,
+          fromStation: stationByPlace[leg.fromId] || null,
+          toStation: stationByPlace[leg.toId] || null,
         }));
       });
 
@@ -349,11 +354,16 @@
 
         const legs = await Promise.all(
           segments.map(async (seg) => {
-            const { coords, approximate } = await window.RouteService.getLeg(seg.from, seg.to, seg.method);
+            const res = await window.RouteService.getLeg(seg.from, seg.to, seg.method);
+            if (seg.method === 'train') {
+              // Record the resolved station for each endpoint (for the leg planner).
+              stationByPlace[seg.from.id] = res.fromStation || null;
+              stationByPlace[seg.to.id] = res.toStation || null;
+            }
             return {
-              coords,
+              coords: res.coords,
               color: TRAVEL[seg.method].color,
-              dashed: approximate || seg.method === 'flight' || seg.method === 'ferry',
+              dashed: res.approximate || seg.method === 'flight' || seg.method === 'ferry',
             };
           })
         );

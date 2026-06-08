@@ -65,14 +65,8 @@
   }
 
   // ── Overpass fetch ───────────────────────────────────────────────────
-  async function fetchRail(poly) {
-    const polyStr = poly.map((p) => `${p.lat.toFixed(5)} ${p.lng.toFixed(5)}`).join(' ');
-    // railway=rail running lines, excluding yard/siding/spur service tracks.
-    const query =
-      `[out:json][timeout:25];` +
-      `way["railway"="rail"]["service"!~"."](poly:"${polyStr}");` +
-      `out geom;`;
-
+  // Shared Overpass POST with timeout + mirror fallback. Returns elements[] or null.
+  async function overpass(query) {
     for (const url of ENDPOINTS) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -92,6 +86,86 @@
       }
     }
     return null;
+  }
+
+  async function fetchRail(poly) {
+    const polyStr = poly.map((p) => `${p.lat.toFixed(5)} ${p.lng.toFixed(5)}`).join(' ');
+    // railway=rail running lines, excluding yard/siding/spur service tracks.
+    const query =
+      `[out:json][timeout:25];` +
+      `way["railway"="rail"]["service"!~"."](poly:"${polyStr}");` +
+      `out geom;`;
+    return overpass(query);
+  }
+
+  // ── Station resolution ───────────────────────────────────────────────
+  const STATION_RADIUS = 25000; // metres to search around a city pin
+  const MAIN_KEYWORDS = [
+    'centrale', 'central', 'centraal', 'zentral', 'hauptbahnhof', 'hbf',
+    'termini', 'huvudstation', 'glowny', 'central station', 'hovedbanegard',
+  ];
+  const stationCache = new Map();
+
+  // Normalise a name for loose matching (lowercase, strip accents/punctuation).
+  function norm(s) {
+    return (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Pick the best railway station for a place:
+   *  - if a station name closely matches the city name, use it (preferring the
+   *    "main"/central station when several match);
+   *  - otherwise use the station nearest the city pin.
+   * @returns {Promise<{name,lat,lng}|null>}
+   */
+  async function resolveStation(place) {
+    if (!place || place.lat == null || place.lng == null) return null;
+    const key = `${place.lat.toFixed(3)},${place.lng.toFixed(3)}|${norm(place.name)}`;
+    if (stationCache.has(key)) return stationCache.get(key);
+
+    const query =
+      `[out:json][timeout:25];` +
+      `(node["railway"="station"](around:${STATION_RADIUS},${place.lat},${place.lng});` +
+      `node["railway"="halt"](around:${STATION_RADIUS},${place.lat},${place.lng}););` +
+      `out body;`;
+
+    let result = null;
+    try {
+      const elements = await overpass(query);
+      const cands = (elements || [])
+        .filter((e) => e.tags && e.tags.name && e.lat != null)
+        .map((e) => ({ name: e.tags.name, lat: e.lat, lng: e.lon, n: norm(e.tags.name) }));
+      if (cands.length) {
+        const city = norm(place.name);
+        cands.forEach((c) => {
+          c.dist = haversine(place.lat, place.lng, c.lat, c.lng);
+        });
+        // Close name match: station name contains the city (or vice-versa).
+        const close =
+          city.length >= 3
+            ? cands.filter((c) => c.n.includes(city) || city.includes(c.n.split(' ')[0]))
+            : [];
+        let pool;
+        if (close.length) {
+          const mains = close.filter((c) => MAIN_KEYWORDS.some((k) => c.n.includes(k)));
+          pool = mains.length ? mains : close;
+        } else {
+          pool = cands; // no name match → nearest station by distance
+        }
+        pool.sort((a, b) => a.dist - b.dist);
+        const best = pool[0];
+        result = { name: best.name, lat: best.lat, lng: best.lng };
+      }
+    } catch (e) {
+      // leave result null
+    }
+    stationCache.set(key, result);
+    return result;
   }
 
   // ── Graph + Dijkstra ─────────────────────────────────────────────────
