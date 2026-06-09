@@ -86,7 +86,8 @@
     <!-- ============================ SPLIT LAYOUT ============================ -->
     <!-- Portrait/mobile: stack (sidebar on top, map below) and let the page
          scroll. Desktop: fixed-height split with an internally-scrolling pane. -->
-    <div class="flex flex-col lg:flex-row lg:h-[calc(100vh-57px)]">
+    <div class="flex flex-col lg:flex-row lg:h-[calc(100vh-57px)]"
+         :class="mapAnchored ? 'pb-[46vh] lg:pb-0' : ''">
 
       <!-- ===================== LEFT SIDEBAR ===================== -->
       <aside class="w-full lg:w-[480px] lg:min-w-[480px] lg:overflow-y-auto border-r border-slate-200 bg-slate-50">
@@ -178,20 +179,18 @@
 
           <!-- Endpoints & flights (per-variant, collapsible) -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <button @click="showEndpoints = !showEndpoints" class="flex items-center gap-2 text-left">
+            <div @click="showEndpoints = !showEndpoints" class="flex items-center justify-between gap-2 cursor-pointer select-none">
+              <span class="flex items-center gap-2">
                 <app-icon name="lucide:plane" :size="18" class="text-sky-600"></app-icon>
                 <span class="font-semibold text-slate-700">Endpoints &amp; Flights</span>
-              </button>
+              </span>
               <div class="flex items-center gap-2">
-                <select v-show="showEndpoints" v-model="copySource" @change="copyEndpointsFrom(copySource)"
+                <select v-show="showEndpoints" v-model="copySource" @click.stop @change="copyEndpointsFrom(copySource)"
                         class="text-[11px] border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[150px]">
                   <option value="" disabled>Copy from…</option>
                   <option v-for="v in otherVariants" :key="v.id" :value="v.id">{{ v.name }}</option>
                 </select>
-                <button @click="showEndpoints = !showEndpoints" class="inline-flex">
-                  <app-icon :name="showEndpoints ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
-                </button>
+                <app-icon :name="showEndpoints ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
               </div>
             </div>
             <div v-show="showEndpoints" class="space-y-3">
@@ -249,19 +248,17 @@
 
           <!-- Variant-specific costs (collapsible) -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <button @click="showVariantCosts = !showVariantCosts" class="flex items-center gap-2 text-left">
+            <div @click="showVariantCosts = !showVariantCosts" class="flex items-center justify-between gap-2 cursor-pointer select-none">
+              <span class="flex items-center gap-2">
                 <app-icon name="lucide:briefcase" :size="18" class="text-slate-500"></app-icon>
                 <span class="font-semibold text-slate-700">Variant Costs</span>
                 <span v-if="showVariantCosts" class="text-xs font-normal text-slate-400">e.g. car hire, rail pass</span>
                 <span v-else class="text-xs font-normal text-slate-400">({{ activeVariant.extraCosts.length }})</span>
-              </button>
+              </span>
               <div class="flex items-center gap-2">
-                <button v-show="showVariantCosts" @click="addExtraCost" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark inline-flex items-center gap-1">
+                <button v-show="showVariantCosts" @click.stop="addExtraCost" class="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark inline-flex items-center gap-1">
                   <app-icon name="lucide:plus" :size="13"></app-icon> Add</button>
-                <button @click="showVariantCosts = !showVariantCosts" class="inline-flex">
-                  <app-icon :name="showVariantCosts ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
-                </button>
+                <app-icon :name="showVariantCosts ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
               </div>
             </div>
             <div v-show="showVariantCosts" class="space-y-3">
@@ -283,14 +280,12 @@
 
           <!-- Legs & route order (collapsible) -->
           <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <button @click="showLegs = !showLegs" class="flex items-center gap-2 text-left">
+            <div @click="showLegs = !showLegs" class="flex items-center justify-between gap-2 cursor-pointer select-none">
+              <span class="flex items-center gap-2">
                 <app-icon name="lucide:route" :size="18" class="text-brand"></app-icon>
                 <span class="font-semibold text-slate-700">Legs &amp; Route Order</span>
-              </button>
-              <button @click="showLegs = !showLegs" class="inline-flex">
-                <app-icon :name="showLegs ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
-              </button>
+              </span>
+              <app-icon :name="showLegs ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="18" class="text-slate-400"></app-icon>
             </div>
             <div v-show="showLegs" class="space-y-3">
             <div class="text-xs text-slate-500">Drag the handle to reorder key destinations:</div>
@@ -384,12 +379,21 @@
             <app-icon name="lucide:copy" :size="14"></app-icon> Duplicate</button>
         </div>
 
-        <!-- Map (fixed viewport height when stacked on mobile; fills on desktop) -->
-        <div class="relative h-[55vh] lg:h-auto lg:flex-1 min-h-[260px]">
+        <!-- Map. On mobile it can pin (fixed) to the bottom of the viewport;
+             on desktop it always fills the pane. -->
+        <div class="relative"
+             :class="mapAnchored
+               ? 'fixed inset-x-0 bottom-0 h-[46vh] z-[600] shadow-[0_-4px_12px_rgba(0,0,0,0.15)] lg:static lg:h-auto lg:flex-1 lg:z-auto lg:shadow-none'
+               : 'h-[55vh] lg:flex-1 min-h-[260px]'">
           <div id="map" class="absolute inset-0"></div>
           <div class="absolute bottom-2 left-2 z-[500] bg-white/90 rounded-md px-2 py-1 text-[11px] text-slate-500 shadow">
             {{ mapProviderLabel }}
           </div>
+          <!-- Anchor / de-anchor the map (mobile only) -->
+          <button @click="toggleMapAnchor" class="lg:hidden absolute top-2 left-2 z-[700] bg-white/90 rounded-md p-1.5 shadow text-slate-600"
+                  :title="mapAnchored ? 'Un-pin map' : 'Pin map to bottom'">
+            <app-icon :name="mapAnchored ? 'lucide:pin-off' : 'lucide:pin'" :size="16"></app-icon>
+          </button>
           <!-- travel-method legend (click a swatch to recolour that mode) -->
           <div class="absolute top-2 right-2 z-[500] bg-white/90 rounded-md px-2 py-1.5 text-[11px] shadow space-y-0.5">
             <div class="text-slate-400 mb-0.5">Legend</div>
