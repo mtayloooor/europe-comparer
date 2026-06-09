@@ -67,6 +67,13 @@
       const showLegs = ref(true);
       // Comparison dashboard: collapsed by default on small screens.
       const showDashboard = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+      // On mobile the map can be anchored (pinned) to the bottom of the viewport.
+      const mapAnchored = ref(true);
+      function toggleMapAnchor() {
+        mapAnchored.value = !mapAnchored.value;
+        // Map container size changes — let Leaflet recompute after the DOM updates.
+        nextTick(() => window.dispatchEvent(new Event('resize')));
+      }
 
       // ── In-page debug log ──────────────────────────────────────────
       const debugEntries = reactive([]);
@@ -703,6 +710,8 @@
         showVariantCosts,
         showLegs,
         showDashboard,
+        mapAnchored,
+        toggleMapAnchor,
         activeVariant,
         otherVariants,
         activeLegs,
