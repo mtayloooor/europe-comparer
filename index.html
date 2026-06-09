@@ -86,8 +86,8 @@
     <!-- ============================ SPLIT LAYOUT ============================ -->
     <!-- Portrait/mobile: stack (sidebar on top, map below) and let the page
          scroll. Desktop: fixed-height split with an internally-scrolling pane. -->
-    <div class="flex flex-col lg:flex-row lg:h-[calc(100vh-57px)]"
-         :class="mapAnchored ? 'pb-[46vh] lg:pb-0' : ''">
+    <div class="layout flex flex-col lg:flex-row lg:h-[calc(100vh-57px)]"
+         :class="{ 'is-pinned': mapAnchored }">
 
       <!-- ===================== LEFT SIDEBAR ===================== -->
       <aside class="w-full lg:w-[480px] lg:min-w-[480px] lg:overflow-y-auto border-r border-slate-200 bg-slate-50">
@@ -381,10 +381,7 @@
 
         <!-- Map. On mobile it can pin (fixed) to the bottom of the viewport;
              on desktop it always fills the pane. -->
-        <div class="relative"
-             :class="mapAnchored
-               ? 'fixed inset-x-0 bottom-0 h-[46vh] z-[600] shadow-[0_-4px_12px_rgba(0,0,0,0.15)] lg:static lg:h-auto lg:flex-1 lg:z-auto lg:shadow-none'
-               : 'h-[55vh] lg:flex-1 min-h-[260px]'">
+        <div class="map-area" :class="{ 'is-pinned': mapAnchored }">
           <div id="map" class="absolute inset-0"></div>
           <div class="absolute bottom-2 left-2 z-[500] bg-white/90 rounded-md px-2 py-1 text-[11px] text-slate-500 shadow">
             {{ mapProviderLabel }}

@@ -85,3 +85,36 @@ select.num-input {
   pointer-events: stroke;
   cursor: pointer;
 }
+
+/* ── Map area sizing & mobile bottom-pinned behaviour ──────────────────
+   Defined in real CSS (not dynamic Tailwind utilities) so it's reliable
+   regardless of how the Play CDN scans dynamically-bound classes. */
+.map-area {
+  position: relative;
+}
+@media (max-width: 1023px) {
+  .map-area:not(.is-pinned) {
+    height: 55vh;
+    min-height: 260px;
+  }
+  .map-area.is-pinned {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 46vh;
+    z-index: 600;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  }
+  /* Reserve space so scrolled content clears the pinned map. */
+  .layout.is-pinned {
+    padding-bottom: 46vh;
+  }
+}
+@media (min-width: 1024px) {
+  /* Desktop: the map always fills the right pane. */
+  .map-area {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+}
