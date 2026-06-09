@@ -17,6 +17,7 @@
         state.activeVariantId = state.variants[0] ? state.variants[0].id : null;
       }
       if (!state.railCache) state.railCache = {};
+      if (!state.legLocks) state.legLocks = {};
 
       const editingVariantId = ref(null);
       const syncPrompt = ref(null); // { mk, label, others, newData }
@@ -197,6 +198,8 @@
           toStation: stationByPlace[leg.toId] || null,
           railOn: railEnabledFor(v, leg.key),
           railLoading: !!railLoading[leg.key],
+          lockedCost: isLegLocked(leg.mk, 'cost'),
+          lockedDuration: isLegLocked(leg.mk, 'duration'),
         }));
       });
 
@@ -298,8 +301,44 @@
         dragIndex.value = null;
         dragOverIndex.value = null;
       }
+
+      // Drag-and-drop reordering of the variant tabs (order persists via state).
+      const dragTabIndex = ref(null);
+      const dragTabOver = ref(null);
+      function onTabDragStart(idx) {
+        dragTabIndex.value = idx;
+      }
+      function onTabDragEnter(idx) {
+        if (dragTabIndex.value !== null) dragTabOver.value = idx;
+      }
+      function onTabDrop(idx) {
+        const from = dragTabIndex.value;
+        dragTabIndex.value = null;
+        dragTabOver.value = null;
+        if (from === null || from === idx) return;
+        const arr = state.variants;
+        const [moved] = arr.splice(from, 1);
+        arr.splice(idx, 0, moved);
+      }
+      function onTabDragEnd() {
+        dragTabIndex.value = null;
+        dragTabOver.value = null;
+      }
       function setLegMethod(leg, method) {
         activeVariant.value.methods[leg.key] = method;
+      }
+
+      // Per-leg, per-field locks (cost / duration) — protected from autofill.
+      function isLegLocked(mk, field) {
+        return !!(state.legLocks[mk] && state.legLocks[mk][field]);
+      }
+      function toggleLegLock(leg, field) {
+        const cur = state.legLocks[leg.mk] || {};
+        const next = { ...cur, [field]: !cur[field] };
+        if (!next.cost) delete next.cost;
+        if (!next.duration) delete next.duration;
+        if (!next.cost && !next.duration) delete state.legLocks[leg.mk];
+        else state.legLocks[leg.mk] = next;
       }
       function editLeg(leg, field, value) {
         if (Number.isNaN(value)) value = 0;
@@ -438,11 +477,17 @@
           const method = (v.methods && v.methods[M.pairKey(a.id, b.id)]) || 'train';
           const mk = M.methodKey(a.id, b.id, method);
           const hasOverride = v.overrides && v.overrides[mk];
-          const current = hasOverride ? v.overrides[mk] : state.legLibrary[mk];
+          const target = hasOverride ? v.overrides : state.legLibrary;
+          const current = target[mk];
           if (!force && !isEmpty(current)) continue;
+          const locks = state.legLocks[mk] || {};
+          if (locks.cost && locks.duration) continue; // fully locked — leave it
           const est = await estimateRealLeg(a, b, method);
-          if (hasOverride) v.overrides[mk] = est;
-          else state.legLibrary[mk] = est;
+          const cur = current || {};
+          target[mk] = {
+            cost: locks.cost ? (cur.cost || 0) : est.cost,
+            duration: locks.duration ? (cur.duration || 0) : est.duration,
+          };
         }
       }
 
@@ -785,6 +830,13 @@
         onDragEnter,
         onDrop,
         onDragEnd,
+        dragTabIndex,
+        dragTabOver,
+        onTabDragStart,
+        onTabDragEnter,
+        onTabDrop,
+        onTabDragEnd,
+        toggleLegLock,
         setLegMethod,
         toggleRailLeg,
         editLeg,
