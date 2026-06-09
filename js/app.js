@@ -75,6 +75,14 @@
         nextTick(() => window.dispatchEvent(new Event('resize')));
       }
 
+      // Collapse / expand every sidebar section at once.
+      const sidebarSections = [showDestinations, showDayTrips, showEndpoints, showVariantCosts, showLegs];
+      const anySectionOpen = computed(() => sidebarSections.some((r) => r.value));
+      function toggleAllSections() {
+        const open = !anySectionOpen.value; // any open → collapse all; none open → expand all
+        sidebarSections.forEach((r) => { r.value = open; });
+      }
+
       // ── In-page debug log ──────────────────────────────────────────
       const debugEntries = reactive([]);
       const showDebug = ref(false);
@@ -390,27 +398,27 @@
         return M.estimateLeg(method, straight); // flight / ferry
       }
 
-      // Autofill estimates. `force` overwrites existing numbers too.
-      async function autofillAll(force) {
-        for (const v of state.variants) {
-          if (force || isEmpty(v.flightIn)) Object.assign(v.flightIn, M.estimateLeg('flight', 1500));
-          if (force || isEmpty(v.flightOut)) Object.assign(v.flightOut, M.estimateLeg('flight', 1500));
+      // Fill a single variant's flights + legs (its own data only).
+      async function autofillVariantData(v, force) {
+        if (force || isEmpty(v.flightIn)) Object.assign(v.flightIn, M.estimateLeg('flight', 1500));
+        if (force || isEmpty(v.flightOut)) Object.assign(v.flightOut, M.estimateLeg('flight', 1500));
 
-          const nodes = M.variantNodes(state, v);
-          for (let i = 0; i < nodes.length - 1; i += 1) {
-            const a = nodes[i];
-            const b = nodes[i + 1];
-            const method = (v.methods && v.methods[M.pairKey(a.id, b.id)]) || 'train';
-            const mk = M.methodKey(a.id, b.id, method);
-            const hasOverride = v.overrides && v.overrides[mk];
-            const current = hasOverride ? v.overrides[mk] : state.legLibrary[mk];
-            if (!force && !isEmpty(current)) continue;
-            const est = await estimateRealLeg(a, b, method);
-            if (hasOverride) v.overrides[mk] = est;
-            else state.legLibrary[mk] = est;
-          }
+        const nodes = M.variantNodes(state, v);
+        for (let i = 0; i < nodes.length - 1; i += 1) {
+          const a = nodes[i];
+          const b = nodes[i + 1];
+          const method = (v.methods && v.methods[M.pairKey(a.id, b.id)]) || 'train';
+          const mk = M.methodKey(a.id, b.id, method);
+          const hasOverride = v.overrides && v.overrides[mk];
+          const current = hasOverride ? v.overrides[mk] : state.legLibrary[mk];
+          if (!force && !isEmpty(current)) continue;
+          const est = await estimateRealLeg(a, b, method);
+          if (hasOverride) v.overrides[mk] = est;
+          else state.legLibrary[mk] = est;
         }
+      }
 
+      function autofillDayTrips(force) {
         state.dayTrips.forEach((dt) => {
           if (!force && dt.cost && dt.duration) return;
           const parent = destById(dt.destinationId);
@@ -420,6 +428,17 @@
           if (force || !dt.cost) dt.cost = est.cost;
           if (force || !dt.duration) dt.duration = est.duration;
         });
+      }
+
+      // Autofill estimates across the whole site. `force` overwrites existing numbers.
+      async function autofillAll(force) {
+        for (const v of state.variants) await autofillVariantData(v, force);
+        autofillDayTrips(force);
+      }
+
+      // Autofill (overwrite) just the active variant's flights + legs.
+      async function autofillVariant() {
+        if (activeVariant.value) await autofillVariantData(activeVariant.value, true);
       }
 
       // ── Import / export / reset ────────────────────────────────────
@@ -712,6 +731,8 @@
         showDashboard,
         mapAnchored,
         toggleMapAnchor,
+        anySectionOpen,
+        toggleAllSections,
         activeVariant,
         otherVariants,
         activeLegs,
@@ -746,6 +767,7 @@
         startRename,
         finishRename,
         autofillAll,
+        autofillVariant,
         exportData,
         importData,
         resetAll,
