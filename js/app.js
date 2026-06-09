@@ -96,6 +96,7 @@
       );
       // Comparison dashboard: collapsed by default on small screens.
       const showDashboard = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+      const showComparison = ref(false); // expanded side-by-side comparison overlay
       // On mobile the map can be anchored (pinned) to the bottom of the viewport.
       const mapAnchored = ref(true);
       function toggleMapAnchor() {
@@ -223,6 +224,29 @@
       });
       const minPrice = computed(() =>
         variantSummaries.value.length ? Math.min(...variantSummaries.value.map((r) => r.price)) : 0
+      );
+
+      // Itemised line items for a variant (used by the expanded comparison).
+      function variantReceipt(v) {
+        const items = [];
+        items.push({ label: 'Flight in', sub: v.origin.name || 'arrival', cost: v.flightIn.cost || 0, time: v.flightIn.duration || 0, kind: 'flight' });
+        M.variantLegs(state, v).forEach((leg) => {
+          items.push({ label: `${leg.fromName} → ${leg.toName}`, sub: TRAVEL[leg.method].label, cost: leg.cost, time: leg.duration, kind: 'leg' });
+        });
+        items.push({ label: 'Flight out', sub: v.destination.name || 'departure', cost: v.flightOut.cost || 0, time: v.flightOut.duration || 0, kind: 'flight' });
+        state.dayTrips.forEach((dt) => {
+          items.push({ label: `Day trip: ${dt.name || '—'}`, sub: 'round trip', cost: M.dayTripCost(dt), time: M.dayTripTime(dt), kind: 'daytrip' });
+        });
+        (v.extraCosts || []).forEach((c) => {
+          items.push({ label: c.label || 'Cost', sub: '', cost: c.amount || 0, time: 0, kind: 'extra' });
+        });
+        return items;
+      }
+      const receipts = computed(() =>
+        variantSummaries.value.map((s) => {
+          const v = state.variants.find((x) => x.id === s.id);
+          return { ...s, items: v ? variantReceipt(v) : [] };
+        })
       );
 
       // ── Formatting ─────────────────────────────────────────────────
@@ -802,6 +826,8 @@
         showVariantCosts,
         showLegs,
         showDashboard,
+        showComparison,
+        receipts,
         mapAnchored,
         toggleMapAnchor,
         anySectionOpen,
