@@ -514,15 +514,15 @@
     </div>
 
     <!-- Expanded comparison (itemised, categorised, aligned across variants) -->
-    <div v-if="showComparison" class="fixed inset-0 z-[2100] bg-black/50 flex items-stretch justify-center p-2 sm:p-4"
+    <div v-if="showComparison" class="fixed inset-0 z-[2100] bg-black/50 flex items-center justify-center p-3 sm:p-5"
          @click.self="showComparison = false">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-[1500px] h-[96vh] flex flex-col">
+      <div class="bg-white rounded-xl shadow-2xl w-[95vw] max-w-[1800px] max-h-[96vh] flex flex-col">
         <div class="flex items-center justify-end px-3 py-2">
           <button @click="showComparison = false" class="text-slate-400 hover:text-slate-600 inline-flex" title="Close">
             <app-icon name="lucide:x" :size="22"></app-icon></button>
         </div>
-        <div class="flex-1 overflow-auto px-4 pb-6">
-          <div class="flex gap-4 w-max mx-auto">
+        <div class="flex-1 overflow-auto px-4 pb-6 flex">
+          <div class="flex gap-4 w-max m-auto">
             <div v-for="col in comparison.cols" :key="col.id"
                  class="cmp-col w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col overflow-hidden"
                  :class="col.id===state.activeVariantId ? 'ring-2 ring-brand/40' : ''">
@@ -563,7 +563,7 @@
                     <span class="block text-xs font-normal text-slate-500">{{ fmtH(col.time) }}</span>
                   </span>
                 </div>
-                <div v-if="!col.cheapest" class="text-[11px] text-rose-500 text-right mt-0.5">+${{ (col.price - minPrice).toLocaleString() }} vs cheapest</div>
+                <div class="text-[11px] text-rose-500 text-right mt-0.5" :class="{ invisible: col.cheapest }">+${{ (col.price - minPrice).toLocaleString() }} vs cheapest</div>
               </div>
             </div>
           </div>
