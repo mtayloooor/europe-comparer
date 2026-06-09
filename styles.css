@@ -10,6 +10,19 @@ body {
   margin: 0;
 }
 
+/* Prevent horizontal scrolling on narrow/portrait screens. */
+body {
+  overflow-x: hidden;
+}
+
+/* Favour a smaller, denser UI on phones. Tailwind sizes are rem-based, so
+   shrinking the root font scales text, padding and controls together. */
+@media (max-width: 640px) {
+  html {
+    font-size: 13px;
+  }
+}
+
 /* Shared input styling referenced from the markup. */
 .city-input {
   display: block;

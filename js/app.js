@@ -65,6 +65,8 @@
       const showEndpoints = ref(true);
       const showVariantCosts = ref(true);
       const showLegs = ref(true);
+      // Comparison dashboard: collapsed by default on small screens.
+      const showDashboard = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
 
       // ── In-page debug log ──────────────────────────────────────────
       const debugEntries = reactive([]);
@@ -700,6 +702,7 @@
         showEndpoints,
         showVariantCosts,
         showLegs,
+        showDashboard,
         activeVariant,
         otherVariants,
         activeLegs,
