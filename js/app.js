@@ -97,6 +97,7 @@
       // Comparison dashboard: collapsed by default on small screens.
       const showDashboard = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
       const showComparison = ref(false); // expanded side-by-side comparison overlay
+      const showSidebar = ref(true); // show/hide the left configuration sidebar
       // On mobile the map can be anchored (pinned) to the bottom of the viewport.
       const mapAnchored = ref(true);
       function toggleMapAnchor() {
@@ -840,6 +841,7 @@
         showLegs,
         showDashboard,
         showComparison,
+        showSidebar,
         comparison,
         mapAnchored,
         toggleMapAnchor,

@@ -39,6 +39,10 @@
     <header class="bg-white sticky top-0 z-[1000]">
       <div class="px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2 min-w-0">
+          <button @click="showSidebar = !showSidebar" :title="showSidebar ? 'Hide sidebar' : 'Show sidebar'"
+                  class="shrink-0 p-1 rounded-md hover:bg-slate-100 text-slate-500">
+            <app-icon :name="showSidebar ? 'lucide:panel-left-close' : 'lucide:panel-left-open'" :size="18"></app-icon>
+          </button>
           <app-icon name="lucide:compass" :size="22" class="text-brand shrink-0"></app-icon>
           <div class="min-w-0">
             <h1 class="text-base sm:text-lg font-bold leading-tight truncate">Europe Trip Comparator</h1>
@@ -90,7 +94,7 @@
          :class="{ 'is-pinned': mapAnchored }">
 
       <!-- ===================== LEFT SIDEBAR ===================== -->
-      <aside class="w-full lg:w-[480px] lg:min-w-[480px] lg:overflow-y-auto border-r border-slate-200 bg-slate-50">
+      <aside v-show="showSidebar" class="w-full lg:w-[480px] lg:min-w-[480px] lg:overflow-y-auto border-r border-slate-200 bg-slate-50">
 
         <!-- Collapse / expand every section -->
         <div class="px-3 py-1.5 flex justify-end border-b border-slate-200 bg-slate-50">
@@ -481,15 +485,15 @@
     </div>
 
     <!-- Debug log: floating toggle + panel -->
-    <button @click="showDebug = !showDebug"
-            class="fixed bottom-3 right-3 z-[1900] px-3 py-2 rounded-full shadow-lg text-white text-xs font-medium inline-flex items-center gap-1"
+    <button @click="showDebug = !showDebug" title="Debug log"
+            class="fixed bottom-3 left-3 z-[1900] px-2.5 py-2 rounded-full shadow-lg text-white text-xs font-medium inline-flex items-center gap-1"
             :class="showDebug ? 'bg-slate-700' : 'bg-slate-500 hover:bg-slate-600'">
-      <app-icon name="lucide:terminal" :size="14"></app-icon> Debug
+      <app-icon name="lucide:terminal" :size="14"></app-icon>
       <span v-if="debugEntries.length" class="bg-white/25 rounded-full px-1.5">{{ debugEntries.length }}</span>
     </button>
 
     <div v-if="showDebug"
-         class="fixed bottom-16 right-3 z-[1900] w-[min(95vw,520px)] h-[min(60vh,420px)] bg-slate-900 text-slate-100 rounded-lg shadow-2xl flex flex-col border border-slate-700">
+         class="fixed bottom-16 left-3 z-[1900] w-[min(95vw,520px)] h-[min(60vh,420px)] bg-slate-900 text-slate-100 rounded-lg shadow-2xl flex flex-col border border-slate-700">
       <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
         <span class="text-xs font-semibold inline-flex items-center gap-1.5">
           <app-icon name="lucide:terminal" :size="14"></app-icon> Debug log
