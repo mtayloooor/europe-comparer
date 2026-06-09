@@ -226,28 +226,41 @@
         variantSummaries.value.length ? Math.min(...variantSummaries.value.map((r) => r.price)) : 0
       );
 
-      // Itemised line items for a variant (used by the expanded comparison).
-      function variantReceipt(v) {
-        const items = [];
-        items.push({ label: 'Flight in', sub: v.origin.name || 'arrival', cost: v.flightIn.cost || 0, time: v.flightIn.duration || 0, kind: 'flight' });
-        M.variantLegs(state, v).forEach((leg) => {
-          items.push({ label: `${leg.fromName} → ${leg.toName}`, sub: TRAVEL[leg.method].label, cost: leg.cost, time: leg.duration, kind: 'leg' });
-        });
-        items.push({ label: 'Flight out', sub: v.destination.name || 'departure', cost: v.flightOut.cost || 0, time: v.flightOut.duration || 0, kind: 'flight' });
-        state.dayTrips.forEach((dt) => {
-          items.push({ label: `Day trip: ${dt.name || '—'}`, sub: 'round trip', cost: M.dayTripCost(dt), time: M.dayTripTime(dt), kind: 'daytrip' });
-        });
-        (v.extraCosts || []).forEach((c) => {
-          items.push({ label: c.label || 'Cost', sub: '', cost: c.amount || 0, time: 0, kind: 'extra' });
-        });
-        return items;
+      // Categorised line items per variant for the expanded comparison.
+      // Sections are padded to a shared row count so they line up across columns.
+      const SECTION_DEFS = [
+        { key: 'flights', title: 'Flights' },
+        { key: 'legs', title: 'Legs' },
+        { key: 'daytrips', title: 'Day trips' },
+        { key: 'extras', title: 'Other costs' },
+      ];
+      function variantSections(v) {
+        return {
+          flights: [
+            { label: 'Flight in', sub: v.origin.name || 'arrival', cost: v.flightIn.cost || 0, time: v.flightIn.duration || 0 },
+            { label: 'Flight out', sub: v.destination.name || 'departure', cost: v.flightOut.cost || 0, time: v.flightOut.duration || 0 },
+          ],
+          legs: M.variantLegs(state, v).map((leg) => ({
+            label: `${leg.fromName} → ${leg.toName}`, sub: TRAVEL[leg.method].label, cost: leg.cost, time: leg.duration,
+          })),
+          daytrips: state.dayTrips.map((dt) => ({
+            label: dt.name || 'Day trip', sub: 'round trip', cost: M.dayTripCost(dt), time: M.dayTripTime(dt),
+          })),
+          extras: (v.extraCosts || []).map((c) => ({ label: c.label || 'Cost', sub: '', cost: c.amount || 0, time: 0 })),
+        };
       }
-      const receipts = computed(() =>
-        variantSummaries.value.map((s) => {
+      const comparison = computed(() => {
+        const cols = variantSummaries.value.map((s) => {
           const v = state.variants.find((x) => x.id === s.id);
-          return { ...s, items: v ? variantReceipt(v) : [] };
-        })
-      );
+          return { ...s, sections: v ? variantSections(v) : { flights: [], legs: [], daytrips: [], extras: [] } };
+        });
+        const maxRows = {};
+        SECTION_DEFS.forEach((def) => {
+          maxRows[def.key] = cols.reduce((m, c) => Math.max(m, c.sections[def.key].length), 0);
+        });
+        const sections = SECTION_DEFS.filter((def) => maxRows[def.key] > 0);
+        return { cols, maxRows, sections };
+      });
 
       // ── Formatting ─────────────────────────────────────────────────
       const fmtH = (h) => {
@@ -827,7 +840,7 @@
         showLegs,
         showDashboard,
         showComparison,
-        receipts,
+        comparison,
         mapAnchored,
         toggleMapAnchor,
         anySectionOpen,

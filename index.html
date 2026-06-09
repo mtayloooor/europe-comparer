@@ -447,7 +447,7 @@
         <!-- Summary dashboard (collapsible; emoji intentionally retained here) -->
         <div class="bg-white border-t border-slate-200 p-3">
           <div @click="showDashboard = !showDashboard" class="flex items-center justify-between gap-2 cursor-pointer select-none">
-            <h3 class="text-sm font-semibold text-slate-600">📊 Comparison</h3>
+            <span class="text-xs text-slate-400">{{ state.variants.length }} variant{{ state.variants.length === 1 ? '' : 's' }}</span>
             <span class="flex items-center gap-2">
               <span v-if="!showDashboard && activeVariant" class="text-xs text-slate-500">
                 {{ variantSummaries.find(s => s.id === activeVariant.id) ? '$' + variantSummaries.find(s => s.id === activeVariant.id).price.toLocaleString() : '' }}
@@ -513,47 +513,58 @@
       </div>
     </div>
 
-    <!-- Expanded comparison (itemised, receipt-style) -->
-    <div v-if="showComparison" class="fixed inset-0 z-[2100] bg-black/50 flex items-stretch sm:items-center justify-center p-2 sm:p-6"
+    <!-- Expanded comparison (itemised, categorised, aligned across variants) -->
+    <div v-if="showComparison" class="fixed inset-0 z-[2100] bg-black/50 flex items-stretch justify-center p-2 sm:p-4"
          @click.self="showComparison = false">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-          <h3 class="font-semibold text-slate-800 flex items-center gap-2">
-            <app-icon name="lucide:receipt" :size="18" class="text-brand"></app-icon> Comparison</h3>
-          <button @click="showComparison = false" class="text-slate-400 hover:text-slate-600 inline-flex">
-            <app-icon name="lucide:x" :size="20"></app-icon></button>
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-[1500px] h-[96vh] flex flex-col">
+        <div class="flex items-center justify-end px-3 py-2">
+          <button @click="showComparison = false" class="text-slate-400 hover:text-slate-600 inline-flex" title="Close">
+            <app-icon name="lucide:x" :size="22"></app-icon></button>
         </div>
-        <div class="flex-1 overflow-auto p-3">
-          <div class="flex gap-3 min-w-min">
-            <div v-for="r in receipts" :key="r.id"
-                 class="w-[240px] shrink-0 border border-slate-200 rounded-lg p-3 flex flex-col"
-                 :class="r.id===state.activeVariantId ? 'ring-2 ring-brand/40' : ''">
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-semibold text-sm truncate">{{ r.name }}</span>
+        <div class="flex-1 overflow-auto px-4 pb-6">
+          <div class="flex gap-4 w-max mx-auto">
+            <div v-for="col in comparison.cols" :key="col.id"
+                 class="cmp-col w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col overflow-hidden"
+                 :class="col.id===state.activeVariantId ? 'ring-2 ring-brand/40' : ''">
+              <!-- column header -->
+              <div class="flex items-center justify-between gap-1 px-4 py-3 bg-white border-b border-slate-200">
+                <span class="font-semibold text-slate-800 truncate">{{ col.name }}</span>
                 <span class="flex gap-1 shrink-0">
-                  <span v-if="r.cheapest" class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">💰</span>
-                  <span v-if="r.fastest" class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">⚡</span>
+                  <span v-if="col.cheapest" class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">💰</span>
+                  <span v-if="col.fastest" class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">⚡</span>
                 </span>
               </div>
-              <div class="mt-2 border-t border-dashed border-slate-300 pt-2 space-y-1.5 font-mono text-[11px] flex-1">
-                <div v-for="(it,i) in r.items" :key="i" class="flex items-start justify-between gap-2">
-                  <span class="text-slate-600 leading-tight">{{ it.label }}
-                    <span v-if="it.sub" class="block text-slate-400">{{ it.sub }}</span>
-                  </span>
-                  <span class="text-right shrink-0">
-                    <span class="text-slate-800">${{ Math.round(it.cost).toLocaleString() }}</span>
-                    <span v-if="it.time" class="block text-slate-400">{{ fmtH(it.time) }}</span>
+
+              <div class="flex-1 px-4 py-2">
+                <template v-for="s in comparison.sections" :key="s.key">
+                  <!-- subheading (aligned across columns) -->
+                  <div class="cmp-subhead">{{ s.title }}</div>
+                  <!-- padded rows so each section is the same height in every column -->
+                  <div v-for="i in comparison.maxRows[s.key]" :key="s.key + i" class="cmp-row">
+                    <template v-if="col.sections[s.key][i-1]">
+                      <span class="cmp-label">
+                        <span class="cmp-name">{{ col.sections[s.key][i-1].label }}</span>
+                        <span v-if="col.sections[s.key][i-1].sub" class="cmp-sub">{{ col.sections[s.key][i-1].sub }}</span>
+                      </span>
+                      <span class="cmp-amount">${{ Math.round(col.sections[s.key][i-1].cost).toLocaleString() }}
+                        <span v-if="col.sections[s.key][i-1].time" class="cmp-time">{{ fmtH(col.sections[s.key][i-1].time) }}</span>
+                      </span>
+                    </template>
+                  </div>
+                </template>
+              </div>
+
+              <!-- total (aligned across columns) -->
+              <div class="px-4 py-3 border-t-2 border-slate-300 bg-white">
+                <div class="flex items-center justify-between font-semibold">
+                  <span class="text-slate-700">Total</span>
+                  <span class="text-right">
+                    <span class="text-lg text-slate-900 tabular-nums">${{ col.price.toLocaleString() }}</span>
+                    <span class="block text-xs font-normal text-slate-500">{{ fmtH(col.time) }}</span>
                   </span>
                 </div>
+                <div v-if="!col.cheapest" class="text-[11px] text-rose-500 text-right mt-0.5">+${{ (col.price - minPrice).toLocaleString() }} vs cheapest</div>
               </div>
-              <div class="mt-2 border-t-2 border-slate-300 pt-2 flex items-center justify-between font-semibold text-sm">
-                <span>Total</span>
-                <span class="text-right">
-                  <span class="text-slate-900">${{ r.price.toLocaleString() }}</span>
-                  <span class="block text-xs font-normal text-slate-500">{{ fmtH(r.time) }}</span>
-                </span>
-              </div>
-              <div v-if="!r.cheapest" class="text-[10px] text-rose-500 text-right mt-1">+${{ (r.price - minPrice).toLocaleString() }} vs cheapest</div>
             </div>
           </div>
         </div>
