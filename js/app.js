@@ -65,6 +65,34 @@
       const showEndpoints = ref(true);
       const showVariantCosts = ref(true);
       const showLegs = ref(true);
+
+      // Persist sidebar section collapse/expand state across refreshes.
+      const UI_KEY = 'europe-comparator-ui-v1';
+      const sectionState = {
+        destinations: showDestinations,
+        dayTrips: showDayTrips,
+        endpoints: showEndpoints,
+        variantCosts: showVariantCosts,
+        legs: showLegs,
+      };
+      try {
+        const ui = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
+        if (ui && ui.sections) {
+          Object.keys(sectionState).forEach((k) => {
+            if (typeof ui.sections[k] === 'boolean') sectionState[k].value = ui.sections[k];
+          });
+        }
+      } catch (e) { /* ignore */ }
+      watch(
+        Object.values(sectionState),
+        () => {
+          const sections = {};
+          Object.keys(sectionState).forEach((k) => { sections[k] = sectionState[k].value; });
+          try {
+            localStorage.setItem(UI_KEY, JSON.stringify({ sections }));
+          } catch (e) { /* ignore */ }
+        }
+      );
       // Comparison dashboard: collapsed by default on small screens.
       const showDashboard = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
       // On mobile the map can be anchored (pinned) to the bottom of the viewport.
