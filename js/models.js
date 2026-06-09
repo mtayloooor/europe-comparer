@@ -180,6 +180,7 @@
       mapkitToken: '',
       travelColors: {}, // per-method colour overrides, e.g. { train: '#0a0' }
       railCache: {}, // persisted fetched rail geometry, keyed by leg coords
+      legLocks: {}, // { [methodKey]: { cost?:true, duration?:true } } — fields protected from autofill
     };
   }
 
@@ -214,6 +215,7 @@
     if (state.mapkitToken == null) state.mapkitToken = '';
     if (!state.travelColors) state.travelColors = {};
     if (!state.railCache) state.railCache = {};
+    if (!state.legLocks) state.legLocks = {};
     return state;
   }
 
