@@ -38,24 +38,24 @@
     <!-- ============================ HEADER ============================ -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-[1000]">
       <div class="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div class="flex items-center gap-2">
-          <app-icon name="lucide:compass" :size="26" class="text-brand"></app-icon>
-          <div>
-            <h1 class="text-lg font-bold leading-tight">Europe Trip Comparator</h1>
-            <p class="text-xs text-slate-500 leading-tight">Compare itinerary variants by cost &amp; time</p>
+        <div class="flex items-center gap-2 min-w-0">
+          <app-icon name="lucide:compass" :size="22" class="text-brand shrink-0"></app-icon>
+          <div class="min-w-0">
+            <h1 class="text-base sm:text-lg font-bold leading-tight truncate">Europe Trip Comparator</h1>
+            <p class="hidden sm:block text-xs text-slate-500 leading-tight">Compare itinerary variants by cost &amp; time</p>
           </div>
         </div>
-        <div class="flex items-center gap-2 text-sm">
+        <div class="flex items-center gap-1.5 sm:gap-2 text-sm">
           <!-- Map provider toggle -->
           <div class="flex rounded-md overflow-hidden border border-slate-300">
             <button @click="setMapProvider('leaflet')"
-                    class="px-2.5 py-1.5 font-medium inline-flex items-center gap-1"
+                    class="px-2 py-1.5 font-medium inline-flex items-center gap-1"
                     :class="state.mapProvider==='leaflet' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">
-              <app-icon name="lucide:map" :size="15"></app-icon> OSM</button>
+              <app-icon name="lucide:map" :size="15"></app-icon><span class="hidden sm:inline"> OSM</span></button>
             <button @click="setMapProvider('mapkit')"
-                    class="px-2.5 py-1.5 font-medium border-l border-slate-300 inline-flex items-center gap-1"
+                    class="px-2 py-1.5 font-medium border-l border-slate-300 inline-flex items-center gap-1"
                     :class="state.mapProvider==='mapkit' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">
-              <app-icon name="lucide:map-pinned" :size="15"></app-icon> Apple</button>
+              <app-icon name="lucide:map-pinned" :size="15"></app-icon><span class="hidden sm:inline"> Apple</span></button>
           </div>
           <button v-if="state.mapProvider==='mapkit'" @click="changeToken"
                   class="px-2 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 inline-flex items-center" title="Set/replace MapKit token">
@@ -63,31 +63,33 @@
 
           <span class="inline-flex rounded-md overflow-hidden">
             <button @click="autofillAll"
-                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium inline-flex items-center gap-1">
-              <app-icon name="lucide:sparkles" :size="15"></app-icon> Autofill</button>
+                    class="px-2 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium inline-flex items-center gap-1">
+              <app-icon name="lucide:sparkles" :size="15"></app-icon><span class="hidden sm:inline"> Autofill</span></button>
             <button @click="showAutofillHelp = true" title="What does Autofill do?"
                     class="px-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white border-l border-amber-400 inline-flex items-center">
               <app-icon name="lucide:circle-help" :size="15"></app-icon></button>
           </span>
-          <button @click="exportData"
-                  class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium inline-flex items-center gap-1">
-            <app-icon name="lucide:download" :size="15"></app-icon> Export</button>
-          <label class="px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium cursor-pointer inline-flex items-center gap-1">
-            <app-icon name="lucide:upload" :size="15"></app-icon> Import
+          <button @click="exportData" title="Export"
+                  class="px-2 sm:px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium inline-flex items-center gap-1">
+            <app-icon name="lucide:download" :size="15"></app-icon><span class="hidden sm:inline"> Export</span></button>
+          <label title="Import" class="px-2 sm:px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 font-medium cursor-pointer inline-flex items-center gap-1">
+            <app-icon name="lucide:upload" :size="15"></app-icon><span class="hidden sm:inline"> Import</span>
             <input type="file" accept="application/json" class="hidden" @change="importData" />
           </label>
-          <button @click="resetAll"
-                  class="px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium inline-flex items-center gap-1">
-            <app-icon name="lucide:rotate-ccw" :size="15"></app-icon> Reset</button>
+          <button @click="resetAll" title="Reset"
+                  class="px-2 sm:px-3 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium inline-flex items-center gap-1">
+            <app-icon name="lucide:rotate-ccw" :size="15"></app-icon><span class="hidden sm:inline"> Reset</span></button>
         </div>
       </div>
     </header>
 
     <!-- ============================ SPLIT LAYOUT ============================ -->
-    <div class="flex flex-col lg:flex-row h-[calc(100vh-61px)]">
+    <!-- Portrait/mobile: stack (sidebar on top, map below) and let the page
+         scroll. Desktop: fixed-height split with an internally-scrolling pane. -->
+    <div class="flex flex-col lg:flex-row lg:h-[calc(100vh-57px)]">
 
       <!-- ===================== LEFT SIDEBAR ===================== -->
-      <aside class="w-full lg:w-[480px] lg:min-w-[480px] overflow-y-auto border-r border-slate-200 bg-slate-50">
+      <aside class="w-full lg:w-[480px] lg:min-w-[480px] lg:overflow-y-auto border-r border-slate-200 bg-slate-50">
 
         <!-- ░░░░░░░░░░ GLOBAL SETUP ░░░░░░░░░░ -->
         <div class="bg-slate-200/60 border-b-2 border-slate-300 px-4 py-2">
@@ -382,8 +384,8 @@
             <app-icon name="lucide:copy" :size="14"></app-icon> Duplicate</button>
         </div>
 
-        <!-- Map -->
-        <div class="relative flex-1 min-h-[280px]">
+        <!-- Map (fixed viewport height when stacked on mobile; fills on desktop) -->
+        <div class="relative h-[55vh] lg:h-auto lg:flex-1 min-h-[260px]">
           <div id="map" class="absolute inset-0"></div>
           <div class="absolute bottom-2 left-2 z-[500] bg-white/90 rounded-md px-2 py-1 text-[11px] text-slate-500 shadow">
             {{ mapProviderLabel }}
@@ -402,10 +404,18 @@
           </div>
         </div>
 
-        <!-- Summary dashboard (emoji intentionally retained here) -->
+        <!-- Summary dashboard (collapsible; emoji intentionally retained here) -->
         <div class="bg-white border-t border-slate-200 p-3">
-          <h3 class="text-sm font-semibold text-slate-600 mb-2">📊 Variant Comparison Dashboard</h3>
-          <div class="grid gap-2" :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }">
+          <button @click="showDashboard = !showDashboard" class="w-full flex items-center justify-between gap-2 text-left">
+            <h3 class="text-sm font-semibold text-slate-600">📊 Variant Comparison Dashboard</h3>
+            <span class="flex items-center gap-2">
+              <span v-if="!showDashboard && activeVariant" class="text-xs text-slate-500">
+                {{ variantSummaries.find(s => s.id === activeVariant.id) ? '$' + variantSummaries.find(s => s.id === activeVariant.id).price.toLocaleString() : '' }}
+              </span>
+              <app-icon :name="showDashboard ? 'lucide:chevron-down' : 'lucide:chevron-up'" :size="18" class="text-slate-400"></app-icon>
+            </span>
+          </button>
+          <div v-show="showDashboard" class="grid gap-2 mt-2" :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }">
             <div v-for="v in variantSummaries" :key="v.id"
                  @click="state.activeVariantId = v.id"
                  class="rounded-lg border p-3 cursor-pointer transition"
