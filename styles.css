@@ -121,7 +121,7 @@ select.num-input {
 
 /* ── Expanded comparison view ─────────────────────────────────────────── */
 .cmp-subhead {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   font-weight: 700;
@@ -129,7 +129,7 @@ select.num-input {
   padding: 10px 0 2px;
 }
 .cmp-row {
-  height: 42px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -147,25 +147,25 @@ select.num-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13.5px;
+  font-size: 14.5px;
   color: #475569;
   line-height: 1.2;
 }
 .cmp-sub {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: #94a3b8;
   line-height: 1.15;
 }
 .cmp-amount {
   text-align: right;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 14.5px;
   color: #1e293b;
   font-variant-numeric: tabular-nums;
 }
 .cmp-time {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: #94a3b8;
 }
