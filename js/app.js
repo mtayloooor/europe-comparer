@@ -227,40 +227,60 @@
         variantSummaries.value.length ? Math.min(...variantSummaries.value.map((r) => r.price)) : 0
       );
 
-      // Categorised line items per variant for the expanded comparison.
-      // Sections are padded to a shared row count so they line up across columns.
-      const SECTION_DEFS = [
-        { key: 'flights', title: 'Flights' },
-        { key: 'legs', title: 'Legs' },
-        { key: 'daytrips', title: 'Day trips' },
-        { key: 'extras', title: 'Other costs' },
-      ];
-      function variantSections(v) {
+      // Data for the expanded comparison. Generic sections (flights, extras,
+      // daytrips) are simple row lists padded to a shared count; legs are
+      // grouped by travel method with an expandable per-method total.
+      const COMPARE_METHOD_ORDER = ['flight', 'train', 'bus', 'car', 'ferry'];
+      const expandedMethods = reactive({}); // method -> expanded? (shared, so columns stay aligned)
+      function toggleCompareMethod(m) {
+        expandedMethods[m] = !expandedMethods[m];
+      }
+
+      function variantParts(v) {
+        const byMethod = {};
+        M.variantLegs(state, v).forEach((leg) => {
+          (byMethod[leg.method] = byMethod[leg.method] || []).push({
+            label: `${leg.fromName} → ${leg.toName}`, cost: leg.cost, time: leg.duration,
+          });
+        });
+        const legGroups = {};
+        Object.keys(byMethod).forEach((m) => {
+          const items = byMethod[m];
+          legGroups[m] = {
+            items,
+            cost: items.reduce((a, b) => a + b.cost, 0),
+            time: items.reduce((a, b) => a + b.time, 0),
+          };
+        });
         return {
           flights: [
             { label: 'Flight in', sub: v.origin.name || 'arrival', cost: v.flightIn.cost || 0, time: v.flightIn.duration || 0 },
             { label: 'Flight out', sub: v.destination.name || 'departure', cost: v.flightOut.cost || 0, time: v.flightOut.duration || 0 },
           ],
-          legs: M.variantLegs(state, v).map((leg) => ({
-            label: `${leg.fromName} → ${leg.toName}`, sub: TRAVEL[leg.method].label, cost: leg.cost, time: leg.duration,
-          })),
-          daytrips: state.dayTrips.map((dt) => ({
-            label: dt.name || 'Day trip', sub: 'round trip', cost: M.dayTripCost(dt), time: M.dayTripTime(dt),
-          })),
           extras: (v.extraCosts || []).map((c) => ({ label: c.label || 'Cost', sub: '', cost: c.amount || 0, time: 0 })),
+          daytrips: state.dayTrips.map((dt) => ({ label: dt.name || 'Day trip', sub: 'round trip', cost: M.dayTripCost(dt), time: M.dayTripTime(dt) })),
+          legGroups,
         };
       }
       const comparison = computed(() => {
         const cols = variantSummaries.value.map((s) => {
           const v = state.variants.find((x) => x.id === s.id);
-          return { ...s, sections: v ? variantSections(v) : { flights: [], legs: [], daytrips: [], extras: [] } };
+          const p = v ? variantParts(v) : { flights: [], extras: [], daytrips: [], legGroups: {} };
+          return { ...s, ...p };
         });
-        const maxRows = {};
-        SECTION_DEFS.forEach((def) => {
-          maxRows[def.key] = cols.reduce((m, c) => Math.max(m, c.sections[def.key].length), 0);
+        const maxRows = {
+          flights: 2,
+          extras: cols.reduce((m, c) => Math.max(m, c.extras.length), 0),
+          daytrips: cols.reduce((m, c) => Math.max(m, c.daytrips.length), 0),
+        };
+        const methodSet = new Set();
+        cols.forEach((c) => Object.keys(c.legGroups).forEach((m) => methodSet.add(m)));
+        const methods = COMPARE_METHOD_ORDER.filter((m) => methodSet.has(m));
+        const maxLegRows = {};
+        methods.forEach((m) => {
+          maxLegRows[m] = cols.reduce((mx, c) => Math.max(mx, c.legGroups[m] ? c.legGroups[m].items.length : 0), 0);
         });
-        const sections = SECTION_DEFS.filter((def) => maxRows[def.key] > 0);
-        return { cols, maxRows, sections };
+        return { cols, maxRows, methods, maxLegRows };
       });
 
       // ── Formatting ─────────────────────────────────────────────────
@@ -843,6 +863,8 @@
         showComparison,
         showSidebar,
         comparison,
+        expandedMethods,
+        toggleCompareMethod,
         mapAnchored,
         toggleMapAnchor,
         anySectionOpen,
