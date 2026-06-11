@@ -613,13 +613,11 @@
 
               <!-- total (aligned across columns) -->
               <div class="px-4 py-3 border-t-2 border-slate-300 bg-white">
-                <div class="flex items-center justify-between font-semibold gap-2">
+                <div class="flex items-baseline justify-between font-semibold gap-2">
                   <span class="text-slate-700">Total</span>
-                  <span class="text-right">
-                    <span class="text-lg text-slate-900 tabular-nums">${{ col.price.toLocaleString() }}</span>
-                    <span class="block text-base font-semibold text-brand">{{ fmtH(col.time) }}</span>
-                  </span>
+                  <span class="text-lg text-slate-900 tabular-nums">${{ col.price.toLocaleString() }}</span>
                 </div>
+                <div class="text-base font-semibold text-right" style="color: rgba(144,144,144,1)">{{ fmtH(col.time) }}</div>
                 <div class="text-[11px] text-rose-500 text-right mt-0.5" :class="{ invisible: col.cheapest }">+${{ (col.price - minPrice).toLocaleString() }} vs cheapest</div>
               </div>
             </div>
