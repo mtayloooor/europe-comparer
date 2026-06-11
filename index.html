@@ -61,6 +61,12 @@
                     :class="state.mapProvider==='mapkit' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-slate-50'">
               <app-icon name="lucide:map-pinned" :size="13"></app-icon><span class="hidden sm:inline"> Apple</span></button>
           </div>
+          <button @click="showDebug = !showDebug" title="Debug log"
+                  class="px-2 py-1 rounded-md inline-flex items-center gap-1"
+                  :class="showDebug ? 'bg-slate-700 text-white' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'">
+            <app-icon name="lucide:terminal" :size="13"></app-icon>
+            <span v-if="debugEntries.length" class="bg-black/10 rounded-full px-1 leading-none">{{ debugEntries.length }}</span>
+          </button>
           <button v-if="state.mapProvider==='mapkit'" @click="changeToken"
                   class="px-1.5 py-1 rounded-md bg-slate-200 hover:bg-slate-300 inline-flex items-center" title="Set/replace MapKit token">
             <app-icon name="lucide:key-round" :size="13"></app-icon></button>
@@ -484,14 +490,7 @@
       </main>
     </div>
 
-    <!-- Debug log: floating toggle + panel -->
-    <button @click="showDebug = !showDebug" title="Debug log"
-            class="fixed bottom-3 left-3 z-[1900] px-2.5 py-2 rounded-full shadow-lg text-white text-xs font-medium inline-flex items-center gap-1"
-            :class="showDebug ? 'bg-slate-700' : 'bg-slate-500 hover:bg-slate-600'">
-      <app-icon name="lucide:terminal" :size="14"></app-icon>
-      <span v-if="debugEntries.length" class="bg-white/25 rounded-full px-1.5">{{ debugEntries.length }}</span>
-    </button>
-
+    <!-- Debug log panel (toggle lives in the header) -->
     <div v-if="showDebug"
          class="fixed bottom-16 left-3 z-[1900] w-[min(95vw,520px)] h-[min(60vh,420px)] bg-slate-900 text-slate-100 rounded-lg shadow-2xl flex flex-col border border-slate-700">
       <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
@@ -520,12 +519,13 @@
     <!-- Expanded comparison (itemised, categorised, aligned across variants) -->
     <div v-if="showComparison" class="fixed inset-0 z-[2100] bg-black/50 flex items-center justify-center p-3 sm:p-5"
          @click.self="showComparison = false">
-      <div class="bg-white rounded-xl shadow-2xl w-[95vw] max-w-[1800px] max-h-[96vh] flex flex-col">
-        <div class="flex items-center justify-end px-3 py-2">
-          <button @click="showComparison = false" class="text-slate-400 hover:text-slate-600 inline-flex" title="Close">
-            <app-icon name="lucide:x" :size="22"></app-icon></button>
-        </div>
-        <div class="flex-1 overflow-auto px-4 pb-6 flex">
+      <div class="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-[1800px] max-h-[96vh] flex flex-col">
+        <!-- floating close button with its own tight background -->
+        <button @click="showComparison = false" title="Close"
+                class="absolute top-2 right-2 z-10 inline-flex p-1.5 rounded-full bg-white/90 shadow text-slate-500 hover:text-slate-700">
+          <app-icon name="lucide:x" :size="20"></app-icon></button>
+
+        <div class="flex-1 overflow-auto px-4 pt-10 pb-6 flex">
           <div class="flex gap-4 w-max m-auto">
             <div v-for="col in comparison.cols" :key="col.id"
                  class="cmp-col w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col overflow-hidden"
@@ -540,18 +540,71 @@
               </div>
 
               <div class="flex-1 px-4 py-2">
-                <template v-for="s in comparison.sections" :key="s.key">
-                  <!-- subheading (aligned across columns) -->
-                  <div class="cmp-subhead">{{ s.title }}</div>
-                  <!-- padded rows so each section is the same height in every column -->
-                  <div v-for="i in comparison.maxRows[s.key]" :key="s.key + i" class="cmp-row">
-                    <template v-if="col.sections[s.key][i-1]">
-                      <span class="cmp-label">
-                        <span class="cmp-name">{{ col.sections[s.key][i-1].label }}</span>
-                        <span v-if="col.sections[s.key][i-1].sub" class="cmp-sub">{{ col.sections[s.key][i-1].sub }}</span>
+                <!-- Flights -->
+                <div class="cmp-subhead">Flights</div>
+                <div v-for="i in comparison.maxRows.flights" :key="'f'+i" class="cmp-row">
+                  <template v-if="col.flights[i-1]">
+                    <span class="cmp-label">
+                      <span class="cmp-name">{{ col.flights[i-1].label }}</span>
+                      <span v-if="col.flights[i-1].sub" class="cmp-sub">{{ col.flights[i-1].sub }}</span>
+                    </span>
+                    <span class="cmp-amount">${{ Math.round(col.flights[i-1].cost).toLocaleString() }}
+                      <span v-if="col.flights[i-1].time" class="cmp-time">{{ fmtH(col.flights[i-1].time) }}</span>
+                    </span>
+                  </template>
+                </div>
+
+                <!-- Other costs -->
+                <template v-if="comparison.maxRows.extras">
+                  <div class="cmp-subhead">Other costs</div>
+                  <div v-for="i in comparison.maxRows.extras" :key="'e'+i" class="cmp-row">
+                    <template v-if="col.extras[i-1]">
+                      <span class="cmp-label"><span class="cmp-name">{{ col.extras[i-1].label }}</span></span>
+                      <span class="cmp-amount">${{ Math.round(col.extras[i-1].cost).toLocaleString() }}</span>
+                    </template>
+                  </div>
+                </template>
+
+                <!-- Legs grouped by travel method (tap a method to expand) -->
+                <template v-if="comparison.methods.length">
+                  <div class="cmp-subhead">Legs</div>
+                  <template v-for="m in comparison.methods" :key="'m'+m">
+                    <div class="cmp-row cursor-pointer" @click="toggleCompareMethod(m)">
+                      <span class="cmp-label flex items-center gap-1">
+                        <app-icon :name="expandedMethods[m] ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="12" class="text-slate-400 shrink-0"></app-icon>
+                        <app-icon :name="TRAVEL[m].lucide" :size="13" class="shrink-0" :style="{ color: colorOf(m) }"></app-icon>
+                        <span class="cmp-name">{{ TRAVEL[m].label }}
+                          <span class="cmp-sub" v-if="col.legGroups[m]">{{ col.legGroups[m].items.length }} leg{{ col.legGroups[m].items.length===1 ? '' : 's' }}</span>
+                        </span>
                       </span>
-                      <span class="cmp-amount">${{ Math.round(col.sections[s.key][i-1].cost).toLocaleString() }}
-                        <span v-if="col.sections[s.key][i-1].time" class="cmp-time">{{ fmtH(col.sections[s.key][i-1].time) }}</span>
+                      <span class="cmp-amount" :class="col.legGroups[m] ? '' : 'text-slate-300'">${{ Math.round(col.legGroups[m] ? col.legGroups[m].cost : 0).toLocaleString() }}
+                        <span class="cmp-time">{{ fmtH(col.legGroups[m] ? col.legGroups[m].time : 0) }}</span>
+                      </span>
+                    </div>
+                    <template v-if="expandedMethods[m]">
+                      <div v-for="i in comparison.maxLegRows[m]" :key="'m'+m+i" class="cmp-row pl-5">
+                        <template v-if="col.legGroups[m] && col.legGroups[m].items[i-1]">
+                          <span class="cmp-label"><span class="cmp-name">{{ col.legGroups[m].items[i-1].label }}</span></span>
+                          <span class="cmp-amount">${{ Math.round(col.legGroups[m].items[i-1].cost).toLocaleString() }}
+                            <span v-if="col.legGroups[m].items[i-1].time" class="cmp-time">{{ fmtH(col.legGroups[m].items[i-1].time) }}</span>
+                          </span>
+                        </template>
+                      </div>
+                    </template>
+                  </template>
+                </template>
+
+                <!-- Day trips -->
+                <template v-if="comparison.maxRows.daytrips">
+                  <div class="cmp-subhead">Day trips</div>
+                  <div v-for="i in comparison.maxRows.daytrips" :key="'d'+i" class="cmp-row">
+                    <template v-if="col.daytrips[i-1]">
+                      <span class="cmp-label">
+                        <span class="cmp-name">{{ col.daytrips[i-1].label }}</span>
+                        <span class="cmp-sub">{{ col.daytrips[i-1].sub }}</span>
+                      </span>
+                      <span class="cmp-amount">${{ Math.round(col.daytrips[i-1].cost).toLocaleString() }}
+                        <span v-if="col.daytrips[i-1].time" class="cmp-time">{{ fmtH(col.daytrips[i-1].time) }}</span>
                       </span>
                     </template>
                   </div>
@@ -560,11 +613,11 @@
 
               <!-- total (aligned across columns) -->
               <div class="px-4 py-3 border-t-2 border-slate-300 bg-white">
-                <div class="flex items-center justify-between font-semibold">
+                <div class="flex items-center justify-between font-semibold gap-2">
                   <span class="text-slate-700">Total</span>
                   <span class="text-right">
                     <span class="text-lg text-slate-900 tabular-nums">${{ col.price.toLocaleString() }}</span>
-                    <span class="block text-xs font-normal text-slate-500">{{ fmtH(col.time) }}</span>
+                    <span class="block text-base font-semibold text-brand">{{ fmtH(col.time) }}</span>
                   </span>
                 </div>
                 <div class="text-[11px] text-rose-500 text-right mt-0.5" :class="{ invisible: col.cheapest }">+${{ (col.price - minPrice).toLocaleString() }} vs cheapest</div>
